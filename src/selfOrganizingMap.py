@@ -4,6 +4,8 @@ class SOMNode(object):
     """Representa um nodo do SOM generico.
     """
 
+    NEIGH_WEIGHT_DFLT = 0.618
+
     def __init__(self, nid, refElem, distFun):
 	"""Inicializa a instancia.
 
@@ -16,8 +18,10 @@ class SOMNode(object):
 	self.refElem = refElem
 	self.distFun = distFun
 
-	self.neighbors = []
+	self.neighbors = set()
+	self.neighWeight = SOMNode.NEIGH_WEIGHT_DFLT
 
+	self.elements = []
 	self.resetElements()
 
     def getID(self):
@@ -30,41 +34,52 @@ class SOMNode(object):
 	"""Esvazia a lista de elementos.
 	"""
 
-	self.elements = []
-	self.sumDist = 0
+	del self.elements[:]
 	self._meanElement = None
 	self._meanSumDist = None
-	self._secondBest = None
-	self._secondBestDist = None
+	self._meanSumDistSq = None
 
-    def calcSumDistToElements(self, elem)
+    def calcSumDistToElements(self, elem):
 	"""Calcula a soma das distancias do elemento fornecido aos
 	elementos atribuídos a este nodo.
 
 	:param elem: Elemento que sera comparado
 	
-	:return: Soma das distancias
+	:return: (Soma das distancias, soma dos quadrados das distancias)
 	"""
 
-	sumDist = 0
+	sumDist = 0.0
+	sumDistSq = 0.0
+	dist = 0.0
 	for e in self.elements:
-	    sumDist += self.distFun(elem, e)
+	    dist = self.distFun(elem, e)
+	    sumDist += dist
+	    sumDistSq += dist * dist
 
-	return sumDist
+	return (sumDist, sumDistSq)
 
     def _findMeanElement(self):
+	"""Encontra o elemento medio do conjunto de elementos.
+
+	O Elemento médio está aqui definido como o elemento que possui a menor
+	soma das distâncias ao quadrado aos outros elementos do conjunto. 
+
+	O método atualiza o campo _meanElement.
+	"""
 	mean = self.refElem
-	meanSumDist = self.sumDist
+	(sumDist, sumDistSq) = self.calcSumDistToElements(self.refElem)
 
 	for candidate in self.elements:
-	    candidateSumDist = self.calcSumDistToElements(candidate)
+	    (candSumDist, candSumDistSq) = self.calcSumDistToElements(candidate)
 
-	    if candidateSumDist < meanSumDist:
+	    if candSumDistSq < sumDistSq:
 		mean = candidate
-		meanSumDist = candidateSumDist
+		sumDist = candSumDist
+		sumDistSq = candSumDistSq
 
 	self._meanElement = mean
-	self._meanSumDist = meanSumDist
+	self._meanSumDist = sumDist
+	self._meanSumDistSq = sumDistSq
 
     def getMeanElement(self):
 	if self._meanElement == None:
@@ -72,11 +87,17 @@ class SOMNode(object):
 
 	return self._meanElement
 
-    def getMeanSumDist(self):
+    def getSumDistFromMean(self):
 	if self._meanSumDist == None:
 	    self._findMeanElement()
 
 	return self._meanSumDist
+
+    def getSumDistFromMeanSquared(self):
+	if self._meanSumDistSq == None:
+	    self._findMeanElement()
+
+	return self._meanSumDistSq
 
     def getNumElements(self):
 	return len(self.elements)
@@ -89,16 +110,6 @@ class SOMNode(object):
 	    dist = self.dist(elem)
 
 	self.elements.append(elem)
-	self.sumDist += dist
-
-	if self._secondBest == None:
-	    if dist > 0:
-		self._secondBest = elem
-		self._secondBestDist = dist
-	elif dist > 0:
-	    if dist < self._secondBestDist:
-		self._secondBest = elem
-		self._secondBestDist = dist
 
     def dist(self, elem):
 	return self.distFun(self.refElem, elem)
@@ -111,7 +122,7 @@ class SOMNode(object):
 
 	for node in self.neighbors:
 	    dist = self.distFun(elem, node.getMeanElement())
-	    weight = 0.5 * self.getNumElements()
+	    weight = self.neighWeight * node.getNumElements()
 	    weightedSumDist += dist * weight
 	    sumWeigths += weight
 
@@ -128,9 +139,66 @@ class SOMNode(object):
 		newRef = elem
 		newRefDist = dist
 
-	# TODO: update second best
-
 	self.refElem = newRef
+
+    def findClosestToMean(self):
+	mean = self.getMeanElement()
+	closest = None
+	closestDist = None
+
+	for elem in self.elements:
+	    dist = self.distFun(elem, mean)
+	    if dist > 0 and (closestDist == None or dist < closestDist):
+		closestDist = dist
+		closest = elem
+
+	return closest
+
+    def divide(self, nid):
+	"""Divide este nodo em dois.
+
+	:param nid: ID do nodo que dever ser criado
+
+	:return: new node
+	"""
+
+	mean = self.getMeanElement()
+	closest = self.findClosestToMean()
+
+	if mean == None or closest == None:
+	    return None
+
+	m = SOMap(self.distFun)
+	m.elements = list(self.elements)
+
+	self.refElem = mean
+	n2 = SOMNode(nid, closest, self.distFun)
+
+	origNeighbors = self.neighbors.copy()
+	self.neighbors.add(n2)
+	n2.neighbors.add(self)
+
+	self.resetElements()
+
+	m.nodes = [self, n2]
+	m.train()
+
+	# Reasigning neighbors
+	self.neighbors.clear()
+	self.neighbors.add(n2)
+	for neigh in origNeighbors:
+	    neigh.neighbors.discard(self)
+	    dist1 = self.distFun(self.getMeanElement(), neigh.getMeanElement())
+	    dist2 = self.distFun(n2.getMeanElement(), neigh.getMeanElement())
+	    
+	    if dist1 < dist2:
+		neigh.neighbors.add(self)
+		self.neighbors.add(neigh)
+	    else:
+		neigh.neighbors.add(n2)
+		n2.neighbors.add(neigh)
+
+	return n2
 
 
 class SOMap(object):
@@ -194,3 +262,61 @@ class SOMap(object):
 	self._resetNodes()
 	self._assignElements()
 	return self._updateNodes()
+
+    def train(self):
+
+	cont = True
+	while cont:
+	    cont = self._trainStep()
+
+    def _initializeMap(self):
+	n0 = SOMNode(0, self.elements[0], self.distFun)
+
+	self.nodes = [n0]
+
+	self.train()
+
+	self.variance = (1.0 * n0.getSumDistFromMeanSquared())
+	self.variance = self.variance/len(self.elements)
+
+	# factor of variance unexplained
+	self.FVU = 1.0
+
+    def _updateFVU(self):
+	sumDistSq = 0.0
+	for node in self.nodes:
+	    sumDistSq += node.getSumDistFromMeanSquared()
+
+	self.FVU = (sumDistSq/len(self.elements))/self.variance
+
+    def _grow(self):
+	maxVariance = 0.0
+	growNode = None
+
+	for node in self.nodes:
+	    var = node.getSumDistFromMeanSquared()/node.getNumElements()
+	    if var > maxVariance:
+		maxVariance = var
+		growNode = node
+	
+	if growNode == None:
+	    return False
+
+	newNode = growNode.divide(len(self.nodes))
+
+	if newNode == None:
+	    return False
+
+	self.nodes.append(newNode)	
+	return True
+
+    def trainAndGrow(self, fvu, maxNodes):
+
+	self._initializeMap()
+
+	while self.FVU > fvu and len(self.nodes) < maxNodes:
+	    if self._grow():
+		self.train()
+		self._updateFVU()
+	    else:
+		break
