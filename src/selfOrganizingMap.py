@@ -3,8 +3,8 @@
 NEIGH_START_WEIGHT_DFLT = 0.6
 NEIGH_WEIGHT_DECAY_DFLT = 0.2
 
-class Control(object):
-    """Classe de controle para fazer a comunicação entre o mapa e seus nodos.
+class Config(object):
+    """Classe de configuração para o SOM
     """
 
     def __init__(self, distFun):
@@ -27,17 +27,17 @@ class SOMNode(object):
     """Representa um nodo do SOM generico.
     """
 
-    def __init__(self, nid, refElem, ctrl):
+    def __init__(self, nid, refElem, conf):
         """Inicializa a instancia.
 
         :param nid: Identificador do nodo.
         :param refElem: Elemento de referência do nodo.
-        :param ctrl: Objeto de controle do som
+        :param conf: Objeto de controle do som
         """
 
         self._id = nid
         self.refElem = refElem
-        self.ctrl = ctrl
+        self.conf = conf
 
         self.neighbors = set()
 
@@ -72,7 +72,7 @@ class SOMNode(object):
         sumDistSq = 0.0
         dist = 0.0
         for e in self.elements:
-            dist = self.ctrl.distFun(elem, e)
+            dist = self.conf.distFun(elem, e)
             sumDist += dist
             sumDistSq += dist * dist
 
@@ -133,17 +133,17 @@ class SOMNode(object):
         self.elements.append(elem)
 
     def dist(self, elem):
-        return self.ctrl.distFun(self.refElem, elem)
+        return self.conf.distFun(self.refElem, elem)
 
     def _calcElemNetDist(self, elem):
-        dist = self.ctrl.distFun(elem, self.getMeanElement())
+        dist = self.conf.distFun(elem, self.getMeanElement())
 
         weightedSumDist = dist * self.getNumElements()
         sumWeigths = self.getNumElements()
 
         for node in self.neighbors:
-            dist = self.ctrl.distFun(elem, node.getMeanElement())
-            weight = self.ctrl.neighWeight * node.getNumElements()
+            dist = self.conf.distFun(elem, node.getMeanElement())
+            weight = self.conf.neighWeight * node.getNumElements()
             weightedSumDist += dist * weight
             sumWeigths += weight
 
@@ -169,7 +169,7 @@ class SOMNode(object):
         closestDist = None
 
         for elem in self.elements:
-            dist = self.ctrl.distFun(elem, mean)
+            dist = self.conf.distFun(elem, mean)
             if dist > 0 and (closestDist == None or dist < closestDist):
                 closestDist = dist
                 closest = elem
@@ -190,31 +190,21 @@ class SOMNode(object):
         if mean == None or closest == None:
             return None
 
-        m = SOMap(self.ctrl.distFun, str(self.getID()) + "-divide")
-        m.elements = list(self.elements)
-
         self.refElem = mean
-        n2 = SOMNode(nid, closest, m.ctrl)
+        n2 = SOMNode(nid, closest, self.conf)
 
-        origCtrl = self.ctrl
-        self.ctrl = m.ctrl
-
-        origNeighbors = self.neighbors.copy()
+        origNeighbors = self.neighbors
+        self.neighbors = set()
         self.neighbors.add(n2)
         n2.neighbors.add(self)
 
         self.resetElements()
 
-        m.nodes = [self, n2]
-        m.train()
-
         # Reasigning neighbors
-        self.neighbors.clear()
-        self.neighbors.add(n2)
         for neigh in origNeighbors:
             neigh.neighbors.discard(self)
-            dist1 = origCtrl.distFun(self.getMeanElement(), neigh.getMeanElement())
-            dist2 = origCtrl.distFun(n2.getMeanElement(), neigh.getMeanElement())
+            dist1 = self.conf.distFun(self.refElem, neigh.refElem)
+            dist2 = self.conf.distFun(n2.refElem, neigh.refElem)
             
             if dist1 < dist2:
                 neigh.neighbors.add(self)
@@ -222,10 +212,6 @@ class SOMNode(object):
             else:
                 neigh.neighbors.add(n2)
                 n2.neighbors.add(neigh)
-
-        # Reseting nodes control to that of the original map
-        self.ctrl = origCtrl
-        n2.ctrl = origCtrl
 
         return n2
 
@@ -239,7 +225,7 @@ class SOMap(object):
 
         :param distFun: Função de distancia a ser utilizada
         """
-        self.ctrl = Control(distFun)
+        self.conf = Config(distFun)
         self.ID = mID
 
         self.numSteps = 0
@@ -299,15 +285,15 @@ class SOMap(object):
 
     def train(self):
 
-        self.ctrl.resetNeighWeight()
+        self.conf.resetNeighWeight()
 
         cont = True
         while cont:
             cont = self._trainStep()
-            self.ctrl.decNeighWeight()
+            self.conf.decNeighWeight()
                 
     def _initializeMap(self):
-        n0 = SOMNode(0, self.elements[0], self.ctrl)
+        n0 = SOMNode(0, self.elements[0], self.conf)
 
         self.nodes = [n0]
 
