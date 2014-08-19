@@ -106,10 +106,10 @@ def randomCirc(cx,cy,raio):
 
 def createYCirculos(numSamples):
 
-    circulos = [(0.0,-2.0,0.5),
-        (0.0,0.0,0.5),
-        (2.0,2.0,0.5),
-        (-2.0,2.0,0.5)]
+    circulos = [(0.0,-2.0,1.0),
+        (0.0,0.0,1.0),
+        (1.0,1.0,1.0),
+        (-1.0,1.0,1.0)]
 
     elements = []
 
@@ -129,13 +129,13 @@ def testCirculos():
 
     outer[1] = m
 
-    m.trainAndGrow(0.1,10)
+    m.trainAndGrow(0.2,10)
 
     writeSOMIterableElements(m, 'circulosRes.txt')
     writeSOMNodes(m, 'circulosNodes.txt')
 
     return m
 
-createYCirculos(1200)
+createYCirculos(400)
 testCirculos()
 #testSeeds()
