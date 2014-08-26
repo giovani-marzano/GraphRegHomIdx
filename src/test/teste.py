@@ -1,7 +1,9 @@
 
 import math
+import itertools
 import random
-import selfOrganizingMap as som
+import SOM.distanceBased as som
+import SOM.vectorBased as somVet
 
 outer = [0, som.SOMap(lambda x,y: 0)]
 
@@ -54,12 +56,54 @@ def writeDataFile(filename, elements):
                 f.write('\t')
             f.write('\n')
         
+def normalizeData(elements):
+
+    numElem = len(elements)
+    sumE = list(itertools.repeat(0, len(elements[0])))
+    sumSqE = sumE[:]
+
+    indices = range(len(elements[0]))
+    for e in elements:
+        for i in indices:
+            sumE[i] += e[i]
+            sumSqE[i] += e[i] * e[i]
+
+    medias = map(lambda x: x/numElem, sumE)
+    stdDev = map(lambda x,y: math.sqrt(x/numElem - (y*y)), sumSqE, medias)
+
+    def normElem(elem):
+        return map(lambda x,m,d: (x - m)/d, elem, medias, stdDev)
+
+    return map(normElem, elements)
+
+def normalizeFile(fileIN, listAttr, fileOut):
+    elements = readDatafile(fileIN, listAttr)
+    elements = normalizeData(elements)
+    writeDataFile(fileOut, elements)
 
 def writeSOMIterableElements(m, fileName):
     with open(fileName,'w') as fout:
         for node in m.nodes:
             nid = node.getID()
             for elem in node.elements:
+                for d in elem:
+                    fout.write(str(d))
+                    fout.write('\t')
+                fout.write(str(nid))
+                fout.write('\n')
+            fout.write('\n\n')
+
+def writeSOMVetElements(m, fileName):
+    clusters = {}
+    for elem in m.elements:
+        (node, dist) = m.findNodeForElem(elem)
+        nid = node.getID()
+        listClus = clusters.setdefault(nid, [])
+        listClus.append(elem)
+
+    with open(fileName,'w') as fout:
+        for nid in sorted(clusters.keys()):
+            for elem in clusters[nid]:
                 for d in elem:
                     fout.write(str(d))
                     fout.write('\t')
@@ -81,6 +125,9 @@ def writeSOMNodes(m, fileName):
                 fout.write('\n')
             fout.write('\n')
 
+def normalizeSeeds():
+    normalizeFile('seeds.txt', [0,1,2,3,4,5,6], 'seedsNorm.txt')
+
 def testSeeds():
 
     elements = readDatafile('seeds.txt', [0,1])
@@ -93,6 +140,23 @@ def testSeeds():
     m.trainAndGrow(0.1,10)
 
     writeSOMIterableElements(m, 'seedsRes.txt')
+
+    return m
+
+def testVetSeeds():
+
+    elements = readDatafile('seedsNorm.txt', [0,5])
+    #elements = readDatafile('seedsNorm.txt', [0,1,2,3,4,5,6])
+
+    m = somVet.SOMap(vectDist)
+    m.elements = elements
+
+    outer[1] = m
+
+    m.trainAndGrow(0.2,10)
+
+    writeSOMVetElements(m, 'seedsVetRes.txt')
+    writeSOMNodes(m, 'seedsVetNodes.txt')
 
     return m
 
@@ -136,6 +200,24 @@ def testCirculos():
 
     return m
 
-createYCirculos(400)
-testCirculos()
+def testCirculosVet():
+
+    elements = readDatafile('circulos.txt', [0,1])
+
+    m = somVet.SOMap()
+    m.elements = elements
+
+    outer[1] = m
+
+    m.trainAndGrow(0.2,10)
+
+    writeSOMVetElements(m, 'circulosVetRes.txt')
+    writeSOMNodes(m, 'circulosVetNodes.txt')
+
+    return m
+
+#createYCirculos(400)
+#testCirculosVet()
 #testSeeds()
+normalizeSeeds()
+testVetSeeds()
