@@ -1,3 +1,4 @@
+# coding: utf-8
 
 def createImageEdges(graph, mapVert, mapTypeEdge):
     """
@@ -42,6 +43,6 @@ def createImageEdges(graph, mapVert, mapTypeEdge):
     def fMapEdgeOriImg(eOrig):
         return mapEOrigEImg[eOrig]
 
-    graphIm = (verts, edges, fSrcIm, fSrcIm)
+    graphIm = (verts, edges, fSrcIm, fDstIm)
 
     return (graphIm, fMapEdgeOriImg, fTypeIm)
