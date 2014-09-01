@@ -3,8 +3,8 @@ import itertools
 import os
 
 dataDir = 'data'
-filePrefix='seedsVet'
-numNodes=3
+filePrefix='circulosVet'
+numNodes=17
 #listaAtribs = [1,2,3,4,5,6,7]
 listaAtribs = [1,2]
 
@@ -12,10 +12,10 @@ imgDir = 'img'
 
 fout = sys.stdout
 
-fout.write("set terminal svg size 400,400\n")
+fout.write("set terminal svg size 500,800\n")
 fout.write("set key off\n")
-fout.write("set xrange [-2:4]\n")
-fout.write("set yrange [-2:4]\n")
+#fout.write("set xrange [-2:4]\n")
+#fout.write("set yrange [-2:4]\n")
 
 params = {'prefix': filePrefix, 'fimIdx': numNodes - 1,
     'dataFilePre': os.path.join(dataDir, filePrefix),

@@ -5,7 +5,11 @@ dimensional. A distância entre os elementos é a distância euclidiana entre os
 pontos.
 """
 
+__author__ = "Giovani Melo Marzano"
+
 import sys
+
+import heap
 
 def diffSquared(a, b):
     """Diferença ao quadrado dos argumentos.
@@ -40,6 +44,15 @@ class Config(object):
       vetor de referência de um nodo e o vetor de referencia original para que
       se considere que houve mudança no vetor de referência.
 
+    - maxNodes: Numero máximo de nodos da rede.
+
+    - FVU: (Fraction of Variance Unexplained) Valor limite da fração de
+      variância não explicada que, quando atingido, causa a parada do
+      crescimento do SOM.
+
+    - MSTPeriod: De quantas em quantas iteracoes realizar o calculo da arvore
+      geradora mínima (Minimal Spanning Tree).
+
     Constantes:
     
     - MAX_STEPS_PER_GENERATION_DFLT: Valor default para o número máximo de
@@ -52,12 +65,21 @@ class Config(object):
       fase de refinamento.
 
     - MIN_CHANGE_DIST_SQ_DFLT: Valor default para minChangeDistSq.
+
+    - MAX_NODES_DFLT: Default para o número máximo de nodos.
+
+    - FVU_DFLT: Default para a fração de variância não explicada.
+
+    - MST_PERIOD_DFLT: Default para o periodo de calculo da MST.
     """
 
     MAX_STEPS_PER_GENERATION_DFLT = 100
     NEIGH_WEIGHT_TRAIN_DFLT = 0.25
     NEIGH_WEIGHT_REFINE_DFLT = 0.0
     MIN_CHANGE_DIST_SQ_DFLT = 0.000001
+    MAX_NODES_DFLT = 100
+    FVU_DFLT = 0.25
+    MST_PERIOD_DFLT = 10
 
     def __init__(self):
 
@@ -65,6 +87,9 @@ class Config(object):
         self.neighWeightTrain = Config.NEIGH_WEIGHT_TRAIN_DFLT
         self.neighWeightRefine = Config.NEIGH_WEIGHT_REFINE_DFLT
         self.minChangeDistSq = Config.MIN_CHANGE_DIST_SQ_DFLT
+        self.maxNodes = Config.MAX_NODES_DFLT
+        self.FVU = Config.FVU_DFLT
+        self.MSTPeriod = Config.MST_PERIOD_DFLT
 
         self.neighWeight = self.neighWeightTrain
 
@@ -148,6 +173,8 @@ class SOMNode(object):
 
         if self._numElem > 0:
             self._meanElement = map(lambda x: x/self._numElem, self._sumVect)
+        else:
+            self._meanElement = self.refElem
 
     def getMeanElement(self):
         """Recupera o ponto medio dos pontos atribuidos a este nodo.
@@ -255,10 +282,15 @@ class SOMap(object):
         self.ID = mID
 
         self.numSteps = 0
+        self.numLastTrainSteps = 0
 
         self.nodes = []
         self.elements = []
         self.FVU = 1.0
+
+        # Atributos para controle do MST
+        self._mstHnd = None
+        self._mstParent = None
 
     def findNodeForElem(self, elem):
         bestNode = self.nodes[0]
@@ -292,12 +324,20 @@ class SOMap(object):
         """
 
         changed = False
+        maxUpdDist = 0
+        updtDist = 0
 
         for node in self.nodes:
             oldRef = node.refElem[:]
             node.updateRefElem()
-            if node.distSq(oldRef) > self.conf.minChangeDistSq:
-                changed = True
+            updtDist = node.distSq(oldRef)
+            if updtDist > maxUpdDist:
+                maxUpdDist = updtDist
+
+        self.lastMaxUpdDistSq = maxUpdDist
+
+        if maxUpdDist > self.conf.minChangeDistSq:
+            changed = True
         
         return changed
 
@@ -326,6 +366,18 @@ class SOMap(object):
             sys.stdout.write("\n")
         sys.stdout.write("\n")
 
+    def _printSumary(self, fase):
+        m = {
+            'fase': fase,
+            'nSteps': self.numSteps,
+            'nTrainSt': self.numLastTrainSteps,
+            'nNodes': len(self.nodes),
+            'FVU': self.FVU
+        }
+        print("{fase}: stTot {nSteps} stLT {nTrainSt} nodes {nNodes} FVU {FVU}".format(
+            **m
+        ))
+
     def train(self):
 
         trainSteps = 0
@@ -336,7 +388,11 @@ class SOMap(object):
             cont = self._trainStep()
             if trainSteps > self.conf.maxStepsPerGeneration:
                 cont = False
-            self._printMap()
+            if self.numSteps % self.conf.MSTPeriod == 0:
+                self._minimunSpanningTree()
+            #self._printMap()
+
+        self.numLastTrainSteps = trainSteps
                 
     def _initializeMap(self):
         n0 = SOMNode(0, self.elements[0], self.conf)
@@ -345,10 +401,9 @@ class SOMap(object):
 
         self.train()
 
-        self.variance = (1.0 * n0.getSumDistFromMeanSquared())
-        self.variance = self.variance/len(self.elements)
+        self.SStot = (1.0 * n0.getSumDistFromMeanSquared())
 
-        # factor of variance unexplained
+        # fraction of variance unexplained
         self.FVU = 1.0
 
     def _updateFVU(self):
@@ -356,7 +411,7 @@ class SOMap(object):
         for node in self.nodes:
             sumDistSq += node.getSumDistFromMeanSquared()
 
-        self.FVU = (sumDistSq/len(self.elements))/self.variance
+        self.FVU = sumDistSq/self.SStot
 
     def _grow(self):
         maxVariance = 0.0
@@ -381,24 +436,62 @@ class SOMap(object):
         self.nodes.append(newNode)        
         return True
 
-    def trainAndGrow(self, fvu, maxNodes):
+    def trainAndGrow(self):
         """Realiza o processo de treinar e aumentar o SOM.
-
-        :param fvu: Valor limite para o fator de variancia não explicada.
-        :param maxNodes: Número máximo de nodos que devem ser gerados.
         """
 
         self.numSteps = 0
         self._initializeMap()
 
+        maxNodes = self.conf.maxNodes
+
         self.conf.applyTraingWeight()
-        while self.FVU > fvu and len(self.nodes) < maxNodes:
+        while self.FVU > self.conf.FVU and len(self.nodes) < maxNodes:
             if self._grow():
                 self.train()
                 self._updateFVU()
+                self._printSumary("Train")
             else:
                 break
 
-        sys.stdout.write("\nrefinamento\n")
+        self._minimunSpanningTree()
+
+        # sys.stdout.write("\nrefinamento\n")
         self.conf.applyRefineWeight()
         self.train()
+        self._minimunSpanningTree()
+        self._printSumary("Refine")
+
+    def _minimunSpanningTree(self):
+        """Minimum Spanning Tree pelo algoritmo de Primm, baseado no livro
+        Algoritmos, teoria e pratica de Cormen, et al.
+        """
+
+        mstHeap = heap.Heap()
+
+        for node in self.nodes:
+            hndl = mstHeap.push(float('inf'), node)
+            node._mstHnd = hndl
+            node._mstParent = None
+            node.neighbors.clear()
+
+        self.nodes[0]._mstHnd.changeKey(0)
+
+        while not mstHeap.isEmpty():
+            (k, node) = mstHeap.pop()
+            for v in self.nodes:
+                if v._mstHnd.isInHeap():
+                    dist = node.distSq(v.refElem) 
+                    if dist < v._mstHnd.getKey():
+                        v._mstHnd.changeKey(dist)
+                        v._mstParent = node
+
+        for node in self.nodes:
+            if node._mstParent != None:
+                node.neighbors.add(node._mstParent)
+                node._mstParent.neighbors.add(node)
+                node._mstParent = None
+                node._mstHnd = None
+
+        print('MST: step {0}'.format(self.numSteps))
+

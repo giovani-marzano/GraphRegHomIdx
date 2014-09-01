@@ -128,6 +128,25 @@ def writeSOMNodes(m, fileName):
                 fout.write('\n')
             fout.write('\n')
 
+def writeSOMDotFile(m, fileName):
+    import gv
+
+    gh = gv.graph(fileName)
+    vh = gv.protonode(gh)
+    gv.setv(vh, 'shape', 'circle')
+
+    for i in range(len(m.nodes)):
+        for j in range(i+1,len(m.nodes)):
+            n1 = m.nodes[i]
+            n2 = m.nodes[j]
+            eh = gv.edge(gh, str(n1.getID()), str(n2.getID()))
+            gv.setv(eh, 'len', str(math.sqrt(n1.distSq(n2.refElem))))
+            if n2 not in n1.neighbors:
+                gv.setv(eh, 'w', '0.1')
+                gv.setv(eh, 'style', 'invis')
+
+    gv.write(gh, os.path.join(data_dir, fileName+".dot"))
+
 def normalizeSeeds():
     normalizeFile('seeds.txt', [0,1,2,3,4,5,6], 'seedsNorm.txt')
 
@@ -146,7 +165,7 @@ def testSeeds():
 
     return m
 
-def testVetSeeds(listAttr):
+def testVetSeeds(listAttr, maxNodes, FVU, wTrain, wRef, maxSteps):
 
     elements = readDatafile('seedsNorm.txt', listAttr)
 
@@ -155,10 +174,18 @@ def testVetSeeds(listAttr):
 
     outer[1] = m
 
-    m.trainAndGrow(0.5,10)
+    m.conf.FVU = FVU
+    m.conf.maxNodes = maxNodes
+    m.conf.neighWeightTrain = wTrain
+    m.conf.neighWeightRefine = wRef
+    m.conf.neighWeightRefine = wRef
+    m.conf.maxStepsPerGeneration = maxSteps
+
+    m.trainAndGrow()
 
     writeSOMVetElements(m, 'seedsVetRes.txt')
     writeSOMNodes(m, 'seedsVetNodes.txt')
+    writeSOMDotFile(m, 'seedsVetTree')
 
     return m
 
@@ -202,7 +229,7 @@ def testCirculos():
 
     return m
 
-def testCirculosVet():
+def testCirculosVet(maxNodes, FVU, wTrain, wRef):
 
     elements = readDatafile('circulos.txt', [0,1])
 
@@ -211,7 +238,12 @@ def testCirculosVet():
 
     outer[1] = m
 
-    m.trainAndGrow(0.2,10)
+    m.conf.FVU = FVU
+    m.conf.maxNodes = maxNodes
+    m.conf.neighWeightTrain = wTrain
+    m.conf.neighWeightRefine = wRef
+
+    m.trainAndGrow()
 
     writeSOMVetElements(m, 'circulosVetRes.txt')
     writeSOMNodes(m, 'circulosVetNodes.txt')
@@ -219,7 +251,7 @@ def testCirculosVet():
     return m
 
 #createYCirculos(1200)
-#testCirculosVet()
+testCirculosVet(100, 0.05, 0.5, 0.5)
 #testSeeds()
 #normalizeSeeds()
-testVetSeeds([5,6])
+#testVetSeeds([0,1,2,3,4,5,6], 100, 0.02, 0.5, 0.5, 20)
