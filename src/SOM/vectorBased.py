@@ -459,6 +459,7 @@ class SOMap(object):
         # sys.stdout.write("\nrefinamento\n")
         self.conf.applyRefineWeight()
         self.train()
+        self._updateFVU()
         self._minimunSpanningTree()
         self._printSumary("Refine")
 

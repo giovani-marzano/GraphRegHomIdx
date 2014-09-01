@@ -251,7 +251,9 @@ def testCirculosVet(maxNodes, FVU, wTrain, wRef):
     return m
 
 #createYCirculos(1200)
-testCirculosVet(100, 0.05, 0.5, 0.5)
+#testCirculosVet(100, 0.05, 0.5, 0.5)
+#testCirculosVet(10, 0.2, 0.5, 0.0)
 #testSeeds()
 #normalizeSeeds()
 #testVetSeeds([0,1,2,3,4,5,6], 100, 0.02, 0.5, 0.5, 20)
+testVetSeeds([0,1,2,3,4,5,6], 10, 0.2, 0.5, 0.1, 20)
