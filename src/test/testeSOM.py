@@ -1,10 +1,15 @@
+import os
+import sys
+
+sys.path.insert(1,os.path.join(sys.path[0],".."))
 
 import math
 import itertools
 import random
 import SOM.distanceBased as som
 import SOM.vectorBased as somVet
-import os
+
+from datetime import datetime
 
 outer = [0, som.SOMap(lambda x,y: 0)]
 
@@ -42,6 +47,10 @@ def readDatafile(fileName, indices):
 
     with open(os.path.join(data_dir, fileName)) as f:
         for line in f:
+            line = line.strip()
+            if len(line) == 0 or line[0] == '#':
+                continue
+
             dv = line.split()
             elem = []
             if len(dv) > 0:
@@ -150,26 +159,11 @@ def writeSOMDotFile(m, fileName):
 def normalizeSeeds():
     normalizeFile('seeds.txt', [0,1,2,3,4,5,6], 'seedsNorm.txt')
 
-def testSeeds():
-
-    elements = readDatafile('seeds.txt', [0,1])
-
-    m = som.SOMap(vectDist)
-    m.elements = elements
-
-    outer[1] = m
-
-    m.trainAndGrow(0.1,10)
-
-    writeSOMIterableElements(m, 'seedsRes.txt')
-
-    return m
-
-def testVetSeeds(listAttr, maxNodes, FVU, wTrain, wRef, maxSteps):
+def testSeeds(listAttr, maxNodes, FVU, wTrain, wRef, maxSteps):
 
     elements = readDatafile('seedsNorm.txt', listAttr)
 
-    m = somVet.SOMap(vectDist)
+    m = som.SOMap(vectDist, "Seeds Dist")
     m.elements = elements
 
     outer[1] = m
@@ -181,7 +175,35 @@ def testVetSeeds(listAttr, maxNodes, FVU, wTrain, wRef, maxSteps):
     m.conf.neighWeightRefine = wRef
     m.conf.maxStepsPerGeneration = maxSteps
 
+    print("\n==== " + str(datetime.now()) + " ====")
     m.trainAndGrow()
+    print("\n==== " + str(datetime.now()) + " ====")
+
+    writeSOMVetElements(m, 'seedsRes.txt')
+    writeSOMNodes(m, 'seedsNodes.txt')
+    writeSOMDotFile(m, 'seedsTree')
+
+    return m
+
+def testVetSeeds(listAttr, maxNodes, FVU, wTrain, wRef, maxSteps):
+
+    elements = readDatafile('seedsNorm.txt', listAttr)
+
+    m = somVet.SOMap("Seeds Vet")
+    m.elements = elements
+
+    outer[1] = m
+
+    m.conf.FVU = FVU
+    m.conf.maxNodes = maxNodes
+    m.conf.neighWeightTrain = wTrain
+    m.conf.neighWeightRefine = wRef
+    m.conf.neighWeightRefine = wRef
+    m.conf.maxStepsPerGeneration = maxSteps
+
+    print("\n==== " + str(datetime.now()) + " ====")
+    m.trainAndGrow()
+    print("\n==== " + str(datetime.now()) + " ====")
 
     writeSOMVetElements(m, 'seedsVetRes.txt')
     writeSOMNodes(m, 'seedsVetNodes.txt')
@@ -253,7 +275,8 @@ def testCirculosVet(maxNodes, FVU, wTrain, wRef):
 #createYCirculos(1200)
 #testCirculosVet(100, 0.05, 0.5, 0.5)
 #testCirculosVet(10, 0.2, 0.5, 0.0)
-#testSeeds()
 #normalizeSeeds()
-#testVetSeeds([0,1,2,3,4,5,6], 100, 0.02, 0.5, 0.5, 20)
-testVetSeeds([0,1,2,3,4,5,6], 10, 0.2, 0.5, 0.1, 20)
+#testSeeds([0,1,2,3,4,5,6], 10, 0.2, 0.5, 0.1, 20)
+#testVetSeeds([0,1,2,3,4,5,6], 10, 0.2, 0.5, 0.1, 20)
+testSeeds([0,1,2,3,4,5,6], 100, 0.02, 0.5, 0.5, 20)
+testVetSeeds([0,1,2,3,4,5,6], 100, 0.02, 0.5, 0.5, 20)

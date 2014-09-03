@@ -124,7 +124,7 @@ if __name__ == "__main__":
     heap = Heap()
     for d in a:
         heap.push(d,d)
-    
+
     b = []
     while not heap.isEmpty():
         (k,d) = heap.pop()

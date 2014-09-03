@@ -51,7 +51,7 @@ def createDotGraph(adjList, classes, gvName="classes"):
     for v in nodes:
         nh = gv.node(gh, str(v))
         gv.setv(nh, 'label', "{0}/{1}".format(v,classes[v]))
-        
+
     for v in nodes:
         for (u, w) in adjList[v]:
             if v < u:

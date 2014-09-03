@@ -5,7 +5,8 @@ import os
 dataDir = 'data'
 #filePrefix='circulosVet'
 filePrefix='seedsVet'
-numNodes=8
+#filePrefix='seeds'
+numNodes=89
 listaAtribs = [1,2,3,4,5,6,7]
 #listaAtribs = [1,2]
 

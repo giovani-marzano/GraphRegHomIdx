@@ -1,27 +1,20 @@
 # coding: utf-8
+"""Implementação de um SOM de crescimento dinâmico ( growing SOM ) baseao do em
+distancias, ou seja, os elementos apresentados ao SOM são opacos para o
+algoritmo e a distancia entre eles é dada pela funcão fornecida.
+"""
 
-NEIGH_START_WEIGHT_DFLT = 0.6
-NEIGH_WEIGHT_DECAY_DFLT = 0.2
+__author__ = "Giovani Melo Marzano"
 
-class Config(object):
+from . import Config, AbstractSOMap
+
+class DistBasedConfig(Config):
     """Classe de configuração para o SOM
     """
 
     def __init__(self, distFun):
-
+        Config.__init__(self)
         self.distFun = distFun
-        self.startWeight = NEIGH_START_WEIGHT_DFLT
-        self.weightDecay = NEIGH_WEIGHT_DECAY_DFLT
-        self.neighWeight = self.startWeight
-
-    def decNeighWeight(self):
-        self.neighWeight -= self.weightDecay
-
-        if self.neighWeight < 0.0:
-            self.neighWeight = 0.0
-
-    def resetNeighWeight(self):
-        self.neighWeight = self.startWeight
 
 class SOMNode(object):
     """Representa um nodo do SOM generico.
@@ -59,12 +52,30 @@ class SOMNode(object):
         self._meanSumDist = None
         self._meanSumDistSq = None
 
+    def insert(self, elem, dist=None):
+        """Insere um elemento na lista de elementos."
+        """
+
+        if dist == None:
+            dist = self.dist(elem)
+
+        self.elements.append(elem)
+
+    def dist(self, elem):
+        return self.conf.distFun(self.refElem, elem)
+
+    def distSq(self, elem):
+        """Quadrado da distancia de elem ao vetor de referencia do nodo.
+        """
+        dist = self.dist(elem)
+        return dist * dist
+
     def calcSumDistToElements(self, elem):
         """Calcula a soma das distancias do elemento fornecido aos
         elementos atribuídos a este nodo.
 
         :param elem: Elemento que sera comparado
-        
+
         :return: (Soma das distancias, soma dos quadrados das distancias)
         """
 
@@ -82,7 +93,7 @@ class SOMNode(object):
         """Encontra o elemento medio do conjunto de elementos.
 
         O Elemento médio está aqui definido como o elemento que possui a menor
-        soma das distâncias ao quadrado aos outros elementos do conjunto. 
+        soma das distâncias ao quadrado aos outros elementos do conjunto.
 
         O método atualiza o campo _meanElement.
         """
@@ -103,6 +114,8 @@ class SOMNode(object):
         self._meanSumDistSq = sumDistSq
 
     def getMeanElement(self):
+        """Recupera o ponto medio dos pontos atribuidos a este nodo.
+        """
         if self._meanElement == None:
             self._findMeanElement()
 
@@ -122,18 +135,6 @@ class SOMNode(object):
 
     def getNumElements(self):
         return len(self.elements)
-
-    def insert(self, elem, dist=None):
-        """Insere um elemento na lista de elementos."
-        """
-
-        if dist == None:
-            dist = self.dist(elem)
-
-        self.elements.append(elem)
-
-    def dist(self, elem):
-        return self.conf.distFun(self.refElem, elem)
 
     def _calcElemNetDist(self, elem):
         dist = self.conf.distFun(elem, self.getMeanElement())
@@ -190,22 +191,26 @@ class SOMNode(object):
         if mean == None or closest == None:
             return None
 
-        self.refElem = mean
-        n2 = SOMNode(nid, closest, self.conf)
+        if self.distSq(mean) > self.conf.minChangeDistSq:
+            newNodeRef = mean
+        elif self.distSq(closest) > self.conf.minChangeDistSq:
+            newNodeRef = closest
+        else:
+            return None
+
+        n2 = SOMNode(nid, newNodeRef, self.conf)
 
         origNeighbors = self.neighbors
         self.neighbors = set()
         self.neighbors.add(n2)
         n2.neighbors.add(self)
 
-        self.resetElements()
-
         # Reasigning neighbors
         for neigh in origNeighbors:
             neigh.neighbors.discard(self)
-            dist1 = self.conf.distFun(self.refElem, neigh.refElem)
-            dist2 = self.conf.distFun(n2.refElem, neigh.refElem)
-            
+            dist1 = neigh.distSq(self.refElem)
+            dist2 = neigh.distSq(n2.refElem)
+
             if dist1 < dist2:
                 neigh.neighbors.add(self)
                 self.neighbors.add(neigh)
@@ -216,7 +221,7 @@ class SOMNode(object):
         return n2
 
 
-class SOMap(object):
+class SOMap(AbstractSOMap):
     """Um mapa auto organizável.
     """
 
@@ -225,122 +230,14 @@ class SOMap(object):
 
         :param distFun: Função de distancia a ser utilizada
         """
-        self.conf = Config(distFun)
-        self.ID = mID
 
-        self.numSteps = 0
+        self.conf = DistBasedConfig(distFun)
 
-        self.nodes = []
-        self.elements = []
+        AbstractSOMap.__init__(self, mID)
 
-    def _assignOneElement(self, elem):
+    def _getNodeOldRefElem(self, node):
+        return node.refElem
 
-        bestNode = self.nodes[0]
-        bestDist = bestNode.dist(elem)
+    def _createSOMNode(self, nid, elem):
+        return SOMNode(nid, elem, self.conf)
 
-        for node in self.nodes:
-            dist = node.dist(elem)
-            if dist < bestDist:
-                bestDist = dist
-                bestNode = node
-
-        bestNode.insert(elem, bestDist)
-
-    def _assignElements(self):
-
-        for elem in self.elements:
-            self._assignOneElement(elem)
-
-    def _resetNodes(self):
-        for node in self.nodes:
-            node.resetElements()
-
-    def _updateNodes(self):
-        """Atualiza os nodos com base nos elementos distribuídos.
-
-        :return: Se houve atualização de algum nodo
-        """
-
-        changed = False
-
-        for node in self.nodes:
-            oldRef = node.refElem
-            node.updateRefElem()
-            if oldRef != node.refElem:
-                changed = True
-        
-        return changed
-
-    def _trainStep(self):
-        """Realiza um passo de treinamento.
-
-        :return: Se hounve mudanca em algum nodo.
-        """
-
-        self.numSteps += 1
-        
-        self._resetNodes()
-        self._assignElements()
-        return self._updateNodes()
-
-    def train(self):
-
-        self.conf.resetNeighWeight()
-
-        cont = True
-        while cont:
-            cont = self._trainStep()
-            self.conf.decNeighWeight()
-                
-    def _initializeMap(self):
-        n0 = SOMNode(0, self.elements[0], self.conf)
-
-        self.nodes = [n0]
-
-        self.train()
-
-        self.variance = (1.0 * n0.getSumDistFromMeanSquared())
-        self.variance = self.variance/len(self.elements)
-
-        # factor of variance unexplained
-        self.FVU = 1.0
-
-    def _updateFVU(self):
-        sumDistSq = 0.0
-        for node in self.nodes:
-            sumDistSq += node.getSumDistFromMeanSquared()
-
-        self.FVU = (sumDistSq/len(self.elements))/self.variance
-
-    def _grow(self):
-        maxVariance = 0.0
-        growNode = None
-
-        for node in self.nodes:
-            var = node.getSumDistFromMeanSquared()/node.getNumElements()
-            if var > maxVariance:
-                maxVariance = var
-                growNode = node
-        
-        if growNode == None:
-            return False
-
-        newNode = growNode.divide(len(self.nodes))
-
-        if newNode == None:
-            return False
-
-        self.nodes.append(newNode)        
-        return True
-
-    def trainAndGrow(self, fvu, maxNodes):
-
-        self.numSteps = 0
-        self._initializeMap()
-
-        while self.FVU > fvu and len(self.nodes) < maxNodes:
-            if self._grow():
-                self.train()
-                self._updateFVU()
-            else:
-                break
