@@ -42,7 +42,7 @@ def clusterize(adjList, maxIterations):
 
     return classes
 
-def createDotGraph(adjList, classes, gvName="classes"):
+def createDotGraph(adjList, classes, gvName="classes", class2color=None):
     import gv
 
     gh = gv.graph(gvName)
@@ -50,7 +50,12 @@ def createDotGraph(adjList, classes, gvName="classes"):
 
     for v in nodes:
         nh = gv.node(gh, str(v))
-        gv.setv(nh, 'label', "{0}/{1}".format(v,classes[v]))
+        if class2color is not None:
+            gv.setv(nh, 'label', '')
+            gv.setv(nh, 'fillcolor', class2color(classes[v]))
+            gv.setv(nh, 'style', 'filled')
+        else:
+            gv.setv(nh, 'label', "{0}/{1}".format(v,classes[v]))
 
     for v in nodes:
         for (u, w) in adjList[v]:
@@ -59,6 +64,21 @@ def createDotGraph(adjList, classes, gvName="classes"):
                 gv.setv(eh, 'weight', str(w))
 
     return gh
+
+def createClass2ColorFun(classes):
+    classSet = set(classes)
+    colorMap = {}
+    hue = 0
+    hueUpd = 1.0/len(classSet)
+
+    for c in classSet:
+        colorMap[c] = '{0:f},1.0,1.0'.format(hue)
+        hue += hueUpd
+
+    def class2color(cls):
+        return colorMap.get(cls,'0.0,0.0,0.0')
+
+    return class2color
 
 if __name__ == "__main__":
     import gv
@@ -78,5 +98,6 @@ if __name__ == "__main__":
     ]
 
     classes = clusterize(adjList, 100)
-    gh = createDotGraph(adjList, classes, "teste")
+    class2color = createClass2ColorFun(classes)
+    gh = createDotGraph(adjList, classes, "teste", class2color)
     gv.write(gh, "teste.dot")
