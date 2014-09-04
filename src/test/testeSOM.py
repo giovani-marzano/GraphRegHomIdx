@@ -9,6 +9,8 @@ import random
 import SOM.distanceBased as som
 import SOM.vectorBased as somVet
 
+import xml.etree.ElementTree as ET
+
 from datetime import datetime
 
 outer = [0, som.SOMap(lambda x,y: 0)]
@@ -137,6 +139,100 @@ def writeSOMNodes(m, fileName):
                 fout.write('\n')
             fout.write('\n')
 
+def writeSOMGraphml(m, name, nodeAttrNames=None):
+    edgeAttrNames = []
+    nodeAttrKeys = {}
+    edgeAttrKeys = {}
+
+    def getNodeAttr(n):
+        if type(n) is int:
+            idx = n
+        else:
+            idx = nodeAttrKeys[n]
+        key = "dn{0}".format(idx)
+        return key
+
+    def getEdgeAttr(n):
+        if type(n) is int:
+            idx = n
+        else:
+            idx = edgeAttrKeys[n]
+        key = "de{0}".format(idx)
+        return key
+
+    def addNodeAttr(n):
+        if n in nodeAttrKeys:
+            raise Exception("ja existe node {}".format(n))
+
+        nodeAttrKeys[n] = len(nodeAttrNames)
+        nodeAttrNames.append(n)
+
+    def addEdgeAttr(n):
+        if n in edgeAttrKeys:
+            raise Exception("ja existe edge {}".format(n))
+
+        edgeAttrKeys[n] = len(edgeAttrNames)
+        edgeAttrNames.append(n)
+
+    if nodeAttrNames is None:
+        nodeAttrNames = []
+    else:
+        aux = nodeAttrNames
+        nodeAttrNames = []
+        for i in range(len(aux)):
+            addNodeAttr(aux[i])
+
+    for i in range(len(nodeAttrNames),len(m.elements[0])):
+        addNodeAttr("attr{0}".format(i))
+
+    addNodeAttr('somNumElem')
+    addEdgeAttr('somDist')
+
+    root = ET.Element('graphml')
+    root.set('xmlns','http://graphml.graphdrawing.org/xmlns')
+    root.set('xmlns:xsi', 'http://www.w3.org/2001/XMLSchema-instance')
+    root.set('xsi:schemaLocation', "http://graphml.graphdrawing.org/xmlns"+
+            " http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd")
+
+    for i in range(len(nodeAttrNames)):
+        key  = ET.SubElement(root, 'key')
+        key.set('id', getNodeAttr(i))
+        key.set('for', 'node')
+        key.set('attr.name', nodeAttrNames[i])
+        key.set('attr.type', 'double')
+
+    for i in range(len(edgeAttrNames)):
+        key  = ET.SubElement(root, 'key')
+        key.set('id', getEdgeAttr(i))
+        key.set('for', 'edge')
+        key.set('attr.name', edgeAttrNames[i])
+        key.set('attr.type', 'double')
+
+    graph = ET.SubElement(root, 'graph')
+    graph.set('id',name)
+    graph.set('edgedefault','undirected')
+    for vert in m.nodes:
+        node = ET.SubElement(graph, 'node')
+        node.set('id', 'n{}'.format(vert.getID()))
+        for j in range(len(vert.refElem)):
+            data = ET.SubElement(node, 'data')
+            data.set('key', getNodeAttr(j))
+            data.text = '{:f}'.format(vert.refElem[j])
+        data = ET.SubElement(node, 'data')
+        data.set('key', getNodeAttr('somNumElem'))
+        data.text = '{}'.format(vert.getNumElements())
+    for v1 in m.nodes:
+        for v2 in v1.neighbors:
+            if v1.getID() < v2.getID():
+                edge = ET.SubElement(graph, 'edge')
+                edge.set('source', 'n{}'.format(v1.getID()))
+                edge.set('target', 'n{}'.format(v2.getID()))
+                data = ET.SubElement(edge, 'data')
+                data.set('key', getEdgeAttr('somDist'))
+                data.text = '{}'.format(v1.dist(v2.refElem))
+    tree = ET.ElementTree(root)
+    tree.write(os.path.join(data_dir,name+'.graphml'))
+
 def writeSOMDotFile(m, fileName):
     import gv
 
@@ -182,6 +278,7 @@ def testSeeds(listAttr, maxNodes, FVU, wTrain, wRef, maxSteps):
     writeSOMVetElements(m, 'seedsRes.txt')
     writeSOMNodes(m, 'seedsNodes.txt')
     writeSOMDotFile(m, 'seedsTree')
+    writeSOMGraphml(m, 'seedsTree')
 
     return m
 
@@ -208,6 +305,7 @@ def testVetSeeds(listAttr, maxNodes, FVU, wTrain, wRef, maxSteps):
     writeSOMVetElements(m, 'seedsVetRes.txt')
     writeSOMNodes(m, 'seedsVetNodes.txt')
     writeSOMDotFile(m, 'seedsVetTree')
+    writeSOMGraphml(m, 'seedsVetTree')
 
     return m
 
@@ -278,5 +376,5 @@ def testCirculosVet(maxNodes, FVU, wTrain, wRef):
 #normalizeSeeds()
 #testSeeds([0,1,2,3,4,5,6], 10, 0.2, 0.5, 0.1, 20)
 #testVetSeeds([0,1,2,3,4,5,6], 10, 0.2, 0.5, 0.1, 20)
-testSeeds([0,1,2,3,4,5,6], 100, 0.02, 0.5, 0.5, 20)
+#testSeeds([0,1,2,3,4,5,6], 100, 0.02, 0.5, 0.5, 20)
 testVetSeeds([0,1,2,3,4,5,6], 100, 0.02, 0.5, 0.5, 20)

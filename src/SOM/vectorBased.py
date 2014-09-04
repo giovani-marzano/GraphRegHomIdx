@@ -9,6 +9,8 @@ __author__ = "Giovani Melo Marzano"
 
 from . import Config, AbstractSOMap
 
+import math
+
 def diffSquared(a, b):
     """Diferença ao quadrado dos argumentos.
     """
