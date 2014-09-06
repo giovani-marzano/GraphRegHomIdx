@@ -11,18 +11,11 @@ from . import Config, AbstractSOMap
 
 import math
 
-def diffSquared(a, b):
-    """Diferença ao quadrado dos argumentos.
-    """
-
-    return pow(a-b, 2)
-
 def euclidDistSq(a, b):
     """Distancia euclidiana ao quadrado de dois vetores.
     """
 
-    c = map(diffSquared, a, b)
-    return sum(c)
+    return sum((pow(ax-bx,2) for ax,bx in zip(a,b)))
 
 class SOMNode(object):
     """Representa um nodo do SOM.
@@ -54,8 +47,8 @@ class SOMNode(object):
         """Esvazia a lista de elementos.
         """
 
-        self._sumVect = map(lambda x: 0.0, self.refElem)
-        self._sumSqVect = self._sumVect[:]
+        self._sumVect = [0.0 for x in self.refElem]
+        self._sumSqVect = [0.0 for x in self.refElem]
         self._numElem = 0
         self._closestElem = None
         self._closestNonZeroDistSq = None
@@ -78,8 +71,10 @@ class SOMNode(object):
            self._closestNonZeroDistSq = distSq
            self._closestElem = elem
 
-        self._sumVect = map(lambda x,y: x + y, self._sumVect, elem)
-        self._sumSqVect = map(lambda x,y: x + (y*y), self._sumSqVect, elem)
+        for i in range(len(elem)):
+            self._sumVect[i] += elem[i]
+            self._sumSqVect[i] += elem[i]*elem[i]
+
         self._numElem += 1
 
         self._meanElement = None
@@ -100,7 +95,7 @@ class SOMNode(object):
         """
 
         if self._numElem > 0:
-            self._meanElement = map(lambda x: x/self._numElem, self._sumVect)
+            self._meanElement = [x/self._numElem for x in self._sumVect]
         else:
             self._meanElement = self.refElem
 
@@ -114,10 +109,8 @@ class SOMNode(object):
 
     def _calcSumDistFromMeanSquared(self):
         if self._numElem > 0:
-            vetDistSq = map(lambda x,y: x - ((y*y)/self._numElem), self._sumSqVect,
-                    self._sumVect)
-
-            self._sumDistFromMeanSq = sum(vetDistSq)
+            self._sumDistFromMeanSq = sum((x - (y*y)/self._numElem for x,y in
+                            zip(self._sumSqVect,self._sumVect)))
         else:
             self._sumDistFromMeanSq = 0
 
@@ -150,7 +143,7 @@ class SOMNode(object):
                 for i in range(len(nodeMean)):
                     newRefSums[i] += nodeMean[i] * peso
 
-        self.refElem = map(lambda x: x/newRefPesos, newRefSums)
+        self.refElem = [x/newRefPesos for x in newRefSums]
 
     def divide(self, nid):
         """Divide este nodo em dois.

@@ -38,7 +38,8 @@ class HeapData(object):
         return (self._index*2 + 2)
 
     def parent(self):
-        return (self._index - 1)/2
+        # '//' -> divisao truncada
+        return (self._index - 1)//2
 
     def getKey(self):
         return self._key
