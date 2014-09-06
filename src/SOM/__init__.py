@@ -2,6 +2,7 @@
 __author__='Giovani Melo Marzano'
 
 import heap
+import math
 
 class Config(object):
     """Classe de configuração para o SOM
@@ -78,6 +79,24 @@ class Config(object):
     def applyRefineWeight(self):
         self.neighWeight = self.neighWeightRefine
 
+    def linearNeighWeight(nv):
+        """Calcula um peso de vizinhança com decaimento linear.
+
+        A reta utilizada é dada pelos pontos (0,1) e (1,neighWeight), onde, em
+        (nv,p), 'v' é o nível de vizinhança e 'p' o peso daquela vizinhança.
+        O próprio nodo tem nível de vizinhança 0, seus vizinhos imediatos 1 e
+        assim por diante.
+
+        :param nv: Nivel de vizinhança
+        """
+
+        w = (self.neighWeight - 1.0)*nv + 1.0
+
+        w = min(1,w)
+        w = max(0,w)
+
+        return w
+
 
 class AbstractSOMap(object):
     """Classe abstrata para mapas auto organizávies.
@@ -132,9 +151,6 @@ class AbstractSOMap(object):
         for node in self.nodes:
             node.resetElements()
 
-    def _getNodeOldRefElem(self, node):
-        raise NotImplementedError()
-
     def _updateNodes(self):
         """Atualiza os nodos com base nos elementos distribuídos.
 
@@ -146,7 +162,7 @@ class AbstractSOMap(object):
         updtDist = 0
 
         for node in self.nodes:
-            oldRef = self._getNodeOldRefElem(node)
+            oldRef = node.elemCopy(node.refElem)
             node.updateRefElem()
             updtDist = node.distSq(oldRef)
             if updtDist > maxUpdDist:
@@ -305,4 +321,126 @@ class AbstractSOMap(object):
                 node._mstHnd = None
 
         print('MST: step {0}'.format(self.numSteps))
+
+class AbstractSOMNode(object):
+    """Representa um nodo do SOM.
+    """
+
+    def __init__(self, nid, refElem, conf):
+        """Inicializa a instancia.
+
+        :param nid: Identificador do nodo.
+        :param refElem: Vetor de referência do nodo.
+        :param conf: Objeto de controle do som
+        """
+
+        self._id = nid
+        self.refElem = self.elemCopy(refElem)
+        self.conf = conf
+
+        self.neighbors = set()
+
+        self.resetElements()
+
+    def elemCopy(self, elem):
+        raise NotImplementedError()
+
+    def getID(self):
+        """Recupera o ID do nodo.
+        """
+        return self._id
+
+    def resetElements(self):
+        """Esvazia a lista de elementos.
+        """
+        raise NotImplementedError()
+
+    def dist(self, elem):
+        return math.sqrt(self.distSq(elem))
+
+    def distSq(self, elem):
+        """Quadrado da distancia de elem ao vetor de referencia do nodo.
+        """
+        raise NotImplementedError()
+
+    def insert(self, elem, distSq=None):
+        """Insere um elemento na lista de elementos.
+        """
+        raise NotImplementedError()
+
+    def _findMeanElement(self):
+        """Encontra o elemento medio do conjunto de elementos.
+
+        O método atualiza o campo _meanElement.
+        """
+        raise NotImplementedError()
+
+    def getMeanElement(self):
+        """Recupera o ponto medio dos pontos atribuidos a este nodo.
+        """
+        if self._meanElement == None:
+            self._findMeanElement()
+
+        return self._meanElement
+
+    def _calcSumDistFromMeanSquared(self):
+        raise NotImplementedError()
+
+    def getSumDistFromMeanSquared(self):
+        if self._sumDistFromMeanSq == None:
+            self._calcSumDistFromMeanSquared()
+
+        return self._sumDistFromMeanSq
+
+    def getNumElements(self):
+        raise NotImplementedError()
+
+    def updateRefElem(self):
+        raise NotImplementedError()
+
+    def _getClosestElem(self):
+        raise NotImplementedError()
+
+    def divide(self, nid):
+        """Divide este nodo em dois.
+
+        :param nid: ID do nodo que dever ser criado
+
+        :return: new node
+        """
+
+        mean = self.getMeanElement()
+        closest = self._getClosestElem()
+
+        if mean == None or closest == None:
+            return None
+
+        if self.distSq(mean) > self.conf.minChangeDistSq:
+            newNodeRef = mean
+        elif self.distSq(closest) > self.conf.minChangeDistSq:
+            newNodeRef = closest
+        else:
+            return None
+
+        n2 = self.__class__(nid, newNodeRef, self.conf)
+
+        origNeighbors = self.neighbors
+        self.neighbors = set()
+        self.neighbors.add(n2)
+        n2.neighbors.add(self)
+
+        # Reasigning neighbors
+        for neigh in origNeighbors:
+            neigh.neighbors.discard(self)
+            dist1 = neigh.distSq(self.refElem)
+            dist2 = neigh.distSq(n2.refElem)
+
+            if dist1 < dist2:
+                neigh.neighbors.add(self)
+                self.neighbors.add(neigh)
+            else:
+                neigh.neighbors.add(n2)
+                n2.neighbors.add(neigh)
+
+        return n2
 
