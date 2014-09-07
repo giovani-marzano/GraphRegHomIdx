@@ -82,7 +82,7 @@ class SOMNode(AbstractSOMNode):
         if self._numElem > 0:
             self._meanElement = [x/self._numElem for x in self._sumVect]
         else:
-            self._meanElement = self.refElem
+            self._meanElement = self.refElem[:]
 
     def _calcSumDistFromMeanSquared(self):
         if self._numElem > 0:
@@ -106,10 +106,10 @@ class SOMNode(AbstractSOMNode):
         for i in range(len(newRefSums)):
             newRefSums[i] *= newRefPesos
 
-        for node in self.neighbors:
+        for node, weight in self.iterNeighboors():
             nodeMean = node.getMeanElement()
             if nodeMean != None:
-                peso = self.conf.neighWeight * (node.getNumElements() + 1.0)
+                peso = weight * (node.getNumElements() + 1.0)
                 newRefPesos += peso
                 for i in range(len(nodeMean)):
                     newRefSums[i] += nodeMean[i] * peso
@@ -136,4 +136,68 @@ class SOMap(AbstractSOMap):
 
     def _createSOMNode(self, nid, elem):
         return SOMNode(nid, elem, self.conf)
+
+    def _initializeHexGrid(self, nrows, ncols):
+        self.nodes = []
+
+        for r in range(nrows):
+            for c in range(ncols):
+                i = c + (r*ncols)
+                k = i % len(self.elements)
+                node = self._createSOMNode(i, self.elements[k])
+                self.nodes.append(node)
+                node.y = r
+                node.x = c + (r%2)*0.5
+
+        idxs = [(0,0) for x in range(6)]
+        for r in range(nrows):
+            for c in range(ncols):
+                i = (r*ncols) + c
+                idxs[0] = (r-1, c + (r % 2)-1)
+                idxs[1] = (r-1, c + (r % 2))
+                idxs[2] = (r, c - 1)
+                idxs[3] = (r, c + 1)
+                idxs[4] = (r+1, c + (r % 2)-1)
+                idxs[5] = (r+1, c + (r % 2))
+                node = self.nodes[i]
+                for rl, cl in idxs:
+                    idx = (rl*ncols) + cl
+                    if 0 <= idx < len(self.nodes) \
+                        and 0 <= rl < nrows \
+                        and 0 <= cl < ncols:
+                        n = self.nodes[idx]
+                        node.neighbors.add(n)
+                        n.neighbors.add(node)
+
+    def _printGridSumary(self, fase, depth, minDepth):
+        m = {
+            'fase': fase,
+            'nSteps': self.numSteps,
+            'nTrainSt': self.numLastTrainSteps,
+            'depth': depth,
+            'minDepth': minDepth
+        }
+        print( "{fase}: stTot {nSteps} stLT {nTrainSt} depth {depth} minDepth {minDepth}".format(
+            **m
+        ))
+
+    def trainHexGrid(self, nrows, ncols):
+
+        self.doMST = False
+        self.numSteps = 0
+
+        self._initializeHexGrid(nrows, ncols)
+        neighDepth = max(nrows/2, ncols/2)
+        neighDepthMin = self.conf.calcMaxDepthForWeight(
+                self.conf.neighWeightRefine)
+
+        while neighDepth > neighDepthMin:
+            self.conf.applyMaxDepthWeight(neighDepth)
+            self.train()
+            self._printGridSumary("Train",neighDepth,neighDepthMin)
+            neighDepth -= 1
+
+        self.conf.applyRefineWeight()
+        self.train()
+        self._printGridSumary("Refine",neighDepth, neighDepthMin)
 

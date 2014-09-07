@@ -3,6 +3,7 @@ __author__='Giovani Melo Marzano'
 
 import heap
 import math
+from collections import deque
 
 class Config(object):
     """Classe de configuração para o SOM
@@ -79,7 +80,7 @@ class Config(object):
     def applyRefineWeight(self):
         self.neighWeight = self.neighWeightRefine
 
-    def linearNeighWeight(nv):
+    def linearNeighWeight(self,nv):
         """Calcula um peso de vizinhança com decaimento linear.
 
         A reta utilizada é dada pelos pontos (0,1) e (1,neighWeight), onde, em
@@ -96,6 +97,27 @@ class Config(object):
         w = max(0,w)
 
         return w
+
+    def applyMaxDepthWeight(self, maxdepth):
+        """Configura o peso de tal forma que em um decaimento linear o peso na
+        profundidade maxdepth + 1 seja zero.
+
+        A reta do decaimento linear é dada pelos pontos (0,1) (maxdepth+1,0). E
+        calcula-se o y em (1,y) colocando este valor em self.neighWeight
+        """
+        self.neighWeight = (-1.0)/(maxdepth+1) + 1.0
+
+    def calcMaxDepthForWeight(self, minweight):
+        """Calcula a profundidade 'p' que gera o peso minweight
+        (aproximadamente) e que a próxima profundidade seja zero.
+
+        Reta de decaimento dada pelos pontos (0,1) (p+1,0) e queremos encontrar
+        'p' em (p, minweight)
+        """
+        if minweight == 0:
+            return 0
+        depth = (1 - minweight)/minweight
+        return max(0,depth)
 
 
 class AbstractSOMap(object):
@@ -123,6 +145,7 @@ class AbstractSOMap(object):
         self.FVU = 1.0
 
         # Atributos para controle do MST
+        self.doMST = False
         self._mstHnd = None
         self._mstParent = None
 
@@ -209,7 +232,7 @@ class AbstractSOMap(object):
             cont = self._trainStep()
             if trainSteps > self.conf.maxStepsPerGeneration:
                 cont = False
-            if self.numSteps % self.conf.MSTPeriod == 0:
+            if self.doMST and self.numSteps % self.conf.MSTPeriod == 0:
                 self._minimunSpanningTree()
             #self._printMap()
 
@@ -260,12 +283,13 @@ class AbstractSOMap(object):
         self.nodes.append(newNode)
         return True
 
-    def trainAndGrow(self):
+    def trainGrowingTree(self):
         """Realiza o processo de treinar e aumentar o SOM.
         """
 
         print("\n---- " + self.ID +" ----")
 
+        self.doMST = True
         self.numSteps = 0
         self._initializeMap()
 
@@ -322,6 +346,7 @@ class AbstractSOMap(object):
 
         print('MST: step {0}'.format(self.numSteps))
 
+
 class AbstractSOMNode(object):
     """Representa um nodo do SOM.
     """
@@ -338,6 +363,9 @@ class AbstractSOMNode(object):
         self.refElem = self.elemCopy(refElem)
         self.conf = conf
 
+        self.x = 0.0
+        self.y = 0.0
+
         self.neighbors = set()
 
         self.resetElements()
@@ -349,6 +377,32 @@ class AbstractSOMNode(object):
         """Recupera o ID do nodo.
         """
         return self._id
+
+    def iterNeighboors(self):
+        """Pesquisa em largura dos vizinhos mais proximos.
+        """
+        depths = {}
+        nodes = deque()
+
+        depths[self] = (0, 1) 
+        nextDepth = 1
+        nextWeight = self.conf.linearNeighWeight(nextDepth)
+        for node in self.neighbors:
+            nodes.append(node)
+            depths[node] = (nextDepth, nextWeight)
+
+        while len(nodes) > 0:
+            node = nodes.popleft()
+            depth, weight = depths[node]
+            nextDepth = depth + 1
+            nextWeight = self.conf.linearNeighWeight(nextDepth)
+            if nextWeight > 0:
+                for child in node.neighbors:
+                    if child not in depths:
+                        depths[child] = (nextDepth, nextWeight)
+                        nodes.append(child)
+            yield (node, weight)
+        
 
     def resetElements(self):
         """Esvazia a lista de elementos.

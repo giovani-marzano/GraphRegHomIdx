@@ -139,9 +139,9 @@ class SOMNode(AbstractSOMNode):
         weightedSumDist = dist * self.getNumElements()
         sumWeigths = self.getNumElements()
 
-        for node in self.neighbors:
+        for node, w in self.iterNeighboors():
             dist = self.conf.distFun(elem, node.getMeanElement())
-            weight = self.conf.neighWeight * node.getNumElements()
+            weight = w * node.getNumElements()
             weightedSumDist += dist * weight
             sumWeigths += weight
 

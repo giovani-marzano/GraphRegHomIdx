@@ -40,7 +40,7 @@ def test1():
     m = som.SOMap(distFun)
     m.elements = elements
 
-    m.trainAndGrow(0.6, 10)
+    m.trainGrowingTree(0.6, 10)
 
     return m
 
@@ -186,6 +186,8 @@ def writeSOMGraphml(m, name, nodeAttrNames=None):
         addNodeAttr("attr{0}".format(i))
 
     addNodeAttr('somNumElem')
+    addNodeAttr('somX')
+    addNodeAttr('somY')
     addEdgeAttr('somDist')
 
     root = ET.Element('graphml')
@@ -221,6 +223,12 @@ def writeSOMGraphml(m, name, nodeAttrNames=None):
         data = ET.SubElement(node, 'data')
         data.set('key', getNodeAttr('somNumElem'))
         data.text = '{}'.format(vert.getNumElements())
+        data = ET.SubElement(node, 'data')
+        data.set('key', getNodeAttr('somX'))
+        data.text = '{}'.format(vert.x)
+        data = ET.SubElement(node, 'data')
+        data.set('key', getNodeAttr('somY'))
+        data.text = '{}'.format(vert.y)
     for v1 in m.nodes:
         for v2 in v1.neighbors:
             if v1.getID() < v2.getID():
@@ -272,12 +280,12 @@ def testSeeds(listAttr, maxNodes, FVU, wTrain, wRef, maxSteps):
     m.conf.maxStepsPerGeneration = maxSteps
 
     print("\n==== " + str(datetime.now()) + " ====")
-    m.trainAndGrow()
+    m.trainGrowingTree()
     print("\n==== " + str(datetime.now()) + " ====")
 
     writeSOMVetElements(m, 'seedsRes.txt')
     writeSOMNodes(m, 'seedsNodes.txt')
-    writeSOMDotFile(m, 'seedsTree')
+    #writeSOMDotFile(m, 'seedsTree')
     writeSOMGraphml(m, 'seedsTree')
 
     return m
@@ -299,13 +307,35 @@ def testVetSeeds(listAttr, maxNodes, FVU, wTrain, wRef, maxSteps):
     m.conf.maxStepsPerGeneration = maxSteps
 
     print("\n==== " + str(datetime.now()) + " ====")
-    m.trainAndGrow()
+    m.trainGrowingTree()
     print("\n==== " + str(datetime.now()) + " ====")
 
     writeSOMVetElements(m, 'seedsVetRes.txt')
     writeSOMNodes(m, 'seedsVetNodes.txt')
-    writeSOMDotFile(m, 'seedsVetTree')
+    #writeSOMDotFile(m, 'seedsVetTree')
     writeSOMGraphml(m, 'seedsVetTree')
+
+    return m
+
+def testVetSeedsGrid(listAttr, nrows, ncols, refineWeight, maxSteps):
+
+    elements = readDatafile('seedsNorm.txt', listAttr)
+
+    m = somVet.SOMap("Seeds Vet")
+    m.elements = elements
+
+    outer[1] = m
+
+    m.conf.neighWeightRefine = refineWeight
+    m.conf.maxStepsPerGeneration = maxSteps
+
+    print("\n==== " + str(datetime.now()) + " ====")
+    m.trainHexGrid(nrows, ncols)
+    print("\n==== " + str(datetime.now()) + " ====")
+
+    writeSOMVetElements(m, 'seedsVetGridRes.txt')
+    writeSOMNodes(m, 'seedsVetGridNodes.txt')
+    writeSOMGraphml(m, 'seedsVetGridTree')
 
     return m
 
@@ -342,7 +372,7 @@ def testCirculos():
 
     outer[1] = m
 
-    m.trainAndGrow(0.2,10)
+    m.trainGrowingTree(0.2,10)
 
     writeSOMIterableElements(m, 'circulosRes.txt')
     writeSOMNodes(m, 'circulosNodes.txt')
@@ -363,7 +393,7 @@ def testCirculosVet(maxNodes, FVU, wTrain, wRef):
     m.conf.neighWeightTrain = wTrain
     m.conf.neighWeightRefine = wRef
 
-    m.trainAndGrow()
+    m.trainGrowingTree()
 
     writeSOMVetElements(m, 'circulosVetRes.txt')
     writeSOMNodes(m, 'circulosVetNodes.txt')
@@ -375,6 +405,7 @@ def testCirculosVet(maxNodes, FVU, wTrain, wRef):
 #testCirculosVet(10, 0.2, 0.5, 0.0)
 #normalizeSeeds()
 #testSeeds([0,1,2,3,4,5,6], 10, 0.2, 0.5, 0.1, 20)
-#testVetSeeds([0,1,2,3,4,5,6], 10, 0.2, 0.5, 0.1, 20)
+#m = testVetSeeds([0,1,2,3,4,5,6], 10, 0.2, 0.5, 0.1, 20)
+m = testVetSeedsGrid([0,1,2,3,4,5,6], 5, 9, 0.5, 20)
 #testSeeds([0,1,2,3,4,5,6], 100, 0.02, 0.5, 0.5, 20)
-testVetSeeds([0,1,2,3,4,5,6], 100, 0.02, 0.5, 0.5, 20)
+#testVetSeeds([0,1,2,3,4,5,6], 100, 0.02, 0.5, 0.5, 20)
