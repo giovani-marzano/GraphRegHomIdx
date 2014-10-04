@@ -1,5 +1,8 @@
 # coding: utf-8
 
+import graph as gm
+import itertools
+
 def createImageEdges(graph, mapVert, mapTypeEdge):
     """
     :param graph: Grafo original como uma tupla (V, E, tgt, dst), onde:
@@ -68,23 +71,20 @@ def createAdjIn(adjOut):
 
     return adjIn
 
-def regularEquivalence(adjOut):
-    adjIn = createAdjIn(adjOut)
-
-    NO_CLASS = -1
-
+def regularEquivalence(graph):
     # Todos os vértices começam na classe de equivalência 0.
     # Iremos processar os vértices em sequência numérica e atribuiremos as
     # clases de tal forma que o número de uma classe seja igual ao número do
     # vértice de menor número pertencente àquela classe.
-    classesAnt = [0 for _ in adjOut]
-    classesNow = [NO_CLASS for _ in adjOut]
+    classesAnt = {node:None for node in graph.nodes()}
+    classesNow = {node:None for node in graph.nodes()}
     changed = True
 
     while changed:
+        print(classesAnt)
         changed = False
-        for n1 in range(len(adjOut)):
-            if classesNow[n1] != NO_CLASS:
+        for n1 in graph.nodes():
+            if classesNow[n1] is not None:
                 continue
 
             classesNow[n1] = n1
@@ -93,23 +93,23 @@ def regularEquivalence(adjOut):
 
             # Conjuntos das classes de equivalencia que possuem arestas
             # entrando e saindo de n1
-            classesInN1  = {classesAnt[v] for v in adjIn[n1] }
-            classesOutN1 = {classesAnt[v] for v in adjOut[n1]}
+            classesInN1 = {(classesAnt[v], r) for v, r in graph.inNeighnoors(n1) }
+            classesOutN1 = {(classesAnt[v], r) for v, r in graph.outNeighboors(n1)}
 
-            for n2 in range(n1 + 1, len(adjOut)):
+            for n2 in graph.nodes():
                 if classesAnt[n2] != classesAnt[n1]:
                     # Se dois vertices nao estavam na mesma classe é porque já
                     # foram considerados incompatíveis.
                     continue
-                if classesNow[n2] != NO_CLASS:
+                if classesNow[n2] is not None:
                     # O vértice n2 já foi atribuido a uma classe, portanto não
                     # precisa ser processado
                     continue
 
                 # Conjuntos das classes de equivalencia que possuem arestas
                 # entrando e saindo de n2
-                classesInN2  = {classesAnt[v] for v in adjIn[n2] }
-                classesOutN2 = {classesAnt[v] for v in adjOut[n2]}
+                classesInN2 = {(classesAnt[v], r) for v, r in graph.inNeighnoors(n2)}
+                classesOutN2 = {(classesAnt[v], r) for v, r in graph.outNeighboors(n2)}
 
                 if classesInN1 == classesInN2 and classesOutN1 == classesOutN2:
                     classesNow[n2] = n1
@@ -117,64 +117,47 @@ def regularEquivalence(adjOut):
                         changed = True
 
         # Preparando os vetores de classes para a próxima iteração
+        classesAux = classesAnt
         classesAnt = classesNow
-        classesNow = [NO_CLASS for _ in classesAnt]
+        classesNow = classesAux
+        for node in classesAux.keys():
+            classesNow[node] = None
 
     return classesAnt
 
-def fullMorphismFromEquiv(adjOut, classes):
+def fullMorphismFromEquiv(graph, classes):
     """Cria um homomorfismo de grafos cheio a partir de uma atribuição de
     vértices a classes de equivalência.
 
     :param adjOut: Lista de adjacências do grafo original.
     :param classes: Lista que mapeia cada véritice a sua classe.
 
-    :return: (newAdjOut, newClasses):
-        - newAdjOut: Lista de adjacencias do novo grafo
-        - newClasses: Lista que mapeia cada vértice do novo grafo a uma classe
-            de equivalência do grafo original
+    :return: grafo das classes de equivalencias.
     """
 
-    # Criando vertices para corresponder às classes de equivalencia
-    newClasses = list({ v for v in classes })
-    classToNewNode = { c:n for n, c in enumerate(newClasses) }
-    classToOldNodes = { c:set() for c in newClasses }
-    for v, c in enumerate(classes):
-        classToOldNodes[c].add(v)
+    newGraph = gm.MultiGraph()
 
-    newAdjOut = [ set() for _ in newClasses ]
-    for newNode, c in enumerate(newClasses):
-        for oldNode1 in classToOldNodes[c]:
-            for oldNode2 in adjOut[oldNode1]:
-                newNode2 = classToNewNode[classes[oldNode2]]
-                newAdjOut[newNode].add(newNode2)
+    for src, tgt, rel in graph.edges():
+        newGraph.addEdge( classes[src], classes[tgt], rel )
 
-    return newAdjOut, newClasses
+    return newGraph
 
 if __name__ == "__main__":
-    import gv
-    from graph import adjListToDotGraph
+    import random
 
-    adjList = [
-        {1,2,3,4,5,7},
-        {4},
-        {5},
-        {6},
-        {},
-        {},
-        {},
-        {0,3,8,9},
-        {9},
-        {}
-    ]
+    graph = gm.MultiGraph()
 
-    classes = regularEquivalence(adjList)
+    graph.addEdge(0,2,0)
+    graph.addEdge(0,2,1)
+    graph.addEdge(0,3,0)
+    graph.addEdge(3,0,0)
+    graph.addEdge(3,4,0)
+    graph.addEdge(3,4,1)
 
-    gOri = adjListToDotGraph(adjList, classes, True, "original")
+    classes = regularEquivalence(graph)
+    graph.setNodeAttrFromDict('class', classes)
 
-    (newAdjList, newClasses) = fullMorphismFromEquiv(adjList, classes)
+    graph.writeDotFile("original.dot")
 
-    gNew = adjListToDotGraph(newAdjList, newClasses)
-
-    gv.write(gOri, "original.dot")
-    gv.write(gNew, "novo.dot")
+    newGraph = fullMorphismFromEquiv(graph, classes)
+    newGraph.writeDotFile("novo.dot")

@@ -1,85 +1,95 @@
 # coding: utf-8
 
-class NodeHandle(object):
-    def __init__(self, graph):
-        self.graph = graph
+import os.path
 
-    def outNeighboors(self):
-        """Return an iterator to the out neighboors of a node.
-        """
-        raise NotImplemented()
+class MultiGraph(object):
+    def __init__(self):
+        self._adjOut = {}
+        self._adjIn = {}
+        self.nodeAttrs = {}
+        self.edgeAttrs = {}
 
-    def inNeighboors(self):
-        """Return an iterator to the in neighboors of a node.
-        """
-        raise NotImplemented()
+    def addNode(self, node):
+        if node not in self._adjOut:
+            self._adjOut[node] = set()
+            self._adjIn[node] = set()
+            self.nodeAttrs[node] = {}
 
-    def outEdges(self):
-        """Return an iterator to the out edges of a node.
-        """
-        raise NotImplemented()
+    def addEdge(self, source, target, relation):
+        edgeTuple = (source, target, relation)
 
-    def inEdges(self):
-        """Return an iterator to the in edges of a node.
-        """
-        raise NotImplemented()
+        if edgeTuple in self.edgeAttrs:
+            # Aresta já existe
+            return
 
-class EdgeHandle(object):
-    def __init__(self, graph):
-        self.graph = graph
+        if source not in self._adjOut:
+            self.addNode(source)
+        if target not in self._adjOut:
+            self.addNode(target)
+        self._adjOut[source].add( (target, relation) )
+        self._adjIn[target].add( (source, relation) )
+        self.edgeAttrs[edgeTuple] = {}
 
-    def source(self):
-        """Return the edge's source node.
-        """
-        raise NotImplemented();
+    def nodes(self):
+        return self._adjOut.keys()
 
-    def target(self):
-        """Return the edge's target node.
-        """
-        raise NotImplemented();
+    def edges(self):
+        return self.edgeAttrs.keys()
 
-    def relation(self):
-        """Return the relation to which the edge belongs.
-        """
-        raise NotImplemented();
+    def outNeighboors(self, node):
+        return iter(self._adjOut[node])
 
-    def weight(self):
-        """Return the edge's weight.
-        """
+    def inNeighnoors(self, node):
+        return iter(self._adjIn[node])
 
-class Graph(object):
-    pass
+    def getNodeAttrValueSet(self, attrName, default=None):
+        valueSet = set()
+        for attrDict in self.nodeAttrs.values():
+            valueSet.add(attrDict.get(attrName, default))
 
-def adjListToDotGraph(adjList, classes=None, directed=True, name="None"):
-    import gv
+        return valueSet
 
-    if classes:
-        classesSet = list(set(classes))
-        classesSet.sort()
+    def setNodeAttrFromDict(self, attrName, attrDict, default=None):
+        for node in self.nodes():
+            value = attrDict.get(node, default)
+            if value is not None:
+                self.nodeAttrs[node][attrName] = value
+
+
+    def writeDotFile(self, filePath, classAttr='class'):
         colorMap = {}
-        hue = 0
-        hueUpd = 1.0/len(classesSet)
+        if classAttr is not None:
+            classesSet = self.getNodeAttrValueSet(classAttr, 0)
+            hue = 0
+            hueUpd = 1.0/len(classesSet)
 
-        for c in classesSet:
-            colorMap[c] = '{0:f},1.0,1.0'.format(hue)
-            hue += hueUpd
+            for c in classesSet:
+                colorMap[c] = '{0:f},1.0,1.0'.format(hue)
+                hue += hueUpd
+        else:
+            classesSet = set([0])
 
-    if directed:
-        gh = gv.digraph(name)
-    else:
-        gh = gv.graph(name)
+        baseName = os.path.basename(filePath)
+        (graphName, ext) = os.path.splitext(baseName)
+        if len(ext) == 0:
+            filePath += '.dot'
 
-    nodes = range(len(adjList))
+        with open(filePath, 'w') as f:
+            f.write("digraph {0} {{\n".format(graphName))
 
-    for v in nodes:
-        nh = gv.node(gh, str(v))
-        if classes is not None:
-            gv.setv(nh, 'fillcolor', colorMap[classes[v]])
-            gv.setv(nh, 'style', 'filled')
+            f.write('  node [label="\\N", style=filled];\n')
 
-    for v in nodes:
-        for u in adjList[v]:
-            if directed or v < u:
-                eh = gv.edge(gh, str(v), str(u))
+            for node in self.nodes():
+                f.write('  {0} [fillcolor="{1}"];\n'.format(
+                    node,
+                    colorMap.get(
+                        self.nodeAttrs[node].get(classAttr,0),
+                        '0.0,0.0,1.0')
+                    )
+                )
 
-    return gh
+            for node in self.nodes():
+                for node2, rel in self.outNeighboors(node):
+                    f.write('  {0} -> {1};\n'.format(node, node2))
+
+            f.write('}}\n')
