@@ -50,27 +50,6 @@ def createImageEdges(graph, mapVert, mapTypeEdge):
 
     return (graphIm, fMapEdgeOriImg, fTypeIm)
 
-def createAdjIn(adjOut):
-    """Cria uma lista de adjacências de saída a partir de uma lista de
-    adjacências de entrada.
-
-    :param adjOut: Lista de conjuntos. Cada vértice é uma posição da lista e o
-        conjunto representa os vértices destino das arestas que saem deste
-        vértice.
-
-    :return: Lista de adjacencias de entrada de um vértice.
-    """
-
-    adjIn = []
-    for l in adjOut:
-        adjIn.append(set())
-
-    for n1 in range(len(adjOut)):
-        for n2 in adjOut[n1]:
-            adjIn[n2].add(n1)
-
-    return adjIn
-
 def regularEquivalence(graph):
     # Todos os vértices começam na classe de equivalência 0.
     # Iremos processar os vértices em sequência numérica e atribuiremos as
@@ -125,12 +104,14 @@ def regularEquivalence(graph):
 
     return classesAnt
 
-def fullMorphismFromEquiv(graph, classes):
+def fullMorphismFromEquiv(graph, classAttr='class', classDflt=0):
     """Cria um homomorfismo de grafos cheio a partir de uma atribuição de
     vértices a classes de equivalência.
 
-    :param adjOut: Lista de adjacências do grafo original.
-    :param classes: Lista que mapeia cada véritice a sua classe.
+    :param graph: Grafo original.
+    :param classAttr: Atributo de nodo usado para identificar a classe do nodo
+    :param classDflt: Classe default para nodos que não possuem o atributo
+        setado.
 
     :return: grafo das classes de equivalencias.
     """
@@ -138,7 +119,12 @@ def fullMorphismFromEquiv(graph, classes):
     newGraph = gm.MultiGraph()
 
     for src, tgt, rel in graph.edges():
-        newGraph.addEdge( classes[src], classes[tgt], rel )
+        srcClass = graph.nodeAttrs[src].get(classAttr, classDflt)
+        tgtClass = graph.nodeAttrs[tgt].get(classAttr, classDflt)
+        newGraph.addEdge( srcClass, tgtClass, rel )
+    
+    for node in newGraph.nodes():
+        newGraph.nodeAttrs[node][classAttr] = node
 
     return newGraph
 
@@ -157,7 +143,8 @@ if __name__ == "__main__":
     classes = regularEquivalence(graph)
     graph.setNodeAttrFromDict('class', classes)
 
-    graph.writeDotFile("original.dot")
+    gm.writeDotFile(graph, "original.dot")
+    gm.writeGraphml(graph, "original")
 
-    newGraph = fullMorphismFromEquiv(graph, classes)
-    newGraph.writeDotFile("novo.dot")
+    newGraph = fullMorphismFromEquiv(graph, 'class')
+    gm.writeDotFile(newGraph, "novo.dot")
