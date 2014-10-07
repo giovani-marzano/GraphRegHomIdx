@@ -66,6 +66,8 @@ class MultiGraph(object):
         self.nodeAttrs = {}
         self.edgeAttrs = {}
         self.relations = set()
+        self.nodeAttrSpecs = {}
+        self.edgeAttrSpecs = {}
 
     def addNode(self, node):
         if node not in self._adjOut:
@@ -107,6 +109,12 @@ class MultiGraph(object):
     def hasEdge(self, src, tgt, rel):
         return (src, tgt, rel) in self.edgeAttrs
 
+    def addNodeAttrSpec(self, attrSpec):
+        self.nodeAttrSpecs[attrSpec.name] = attrSpec
+
+    def addEdgeAttrSpec(self, attrSpec):
+        self.edgeAttrSpecs[attrSpec.name] = attrSpec
+
     def getNodeAttrValueSet(self, attrName, default=None):
         valueSet = set()
         for attrDict in self.nodeAttrs.values():
@@ -133,6 +141,18 @@ class MultiGraph(object):
             for name in attrDict.keys():
                 names.add(name)
         return names
+
+    def setNodeAttr(self, node, attr, value):
+        self.nodeAttrs[node][attr] = value
+
+    def getNodeAttr(self, node, attr, dflt=None):
+        return self.nodeAttrs[node].get(attr, dflt)
+
+    def setEdgeAttr(self, edge, attr, value):
+        self.edgeAttrs[edge][attr] = value
+
+    def getEdgeAttr(self, edge, attr, dflt=None):
+        return self.edgeAttrs[edge].get(attr, dflt)
 
     def classifyNodesRegularEquivalence(self, classAttr='class'):
         """Cria um atributo de nodos que os particiona em classes de
@@ -253,6 +273,29 @@ def writeDotFile(graph, filePath, classAttr='class'):
 
         f.write('}}\n')
 
+class AttrSpec(object):
+    VALID_TYPES = ('float','double','int','long','boolean','string')
+
+    def __init__(self, attr_name, attr_type):
+        self.name = attr_name
+        self.type = attr_type
+        self.default = None
+
+    def strToType(self, strValue):
+        if self.type == 'float' or self.type == 'double':
+            return float(strValue)
+        if self.type == 'int' or self.type == 'long':
+            return int(strValue)
+        if self.type == 'boolean':
+            return strValue.lower() in ('true','1','t')
+        else:
+            return strValue
+
+    def setDefault(self,dfltValue):
+        if isinstance(dfltValue, str):
+            dfltValue = self.strToType(dfltValue)
+        self.default = dfltValue
+
 def writeGraphml(mGraph, filePath):
     root = ET.Element('graphml')
     root.set('xmlns',
@@ -263,32 +306,61 @@ def writeGraphml(mGraph, filePath):
             "http://graphml.graphdrawing.org/xmlns"+
             " http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd")
 
-    nodeAttrNames = mGraph.getNodeAttrNames()
-    edgeAttrNames = mGraph.getEdgeAttrNames()
-
     nodeAttrIDs = {}
-    for n, attr in enumerate(nodeAttrNames):
-        nodeAttrIDs[attr] = 'dn{}'.format(n)
-
     edgeAttrIDs = {}
-    superEdgeAtts = edgeAttrNames | set([EDGE_RELATION_ATTR])
-    for n, attr in enumerate(superEdgeAtts):
-        edgeAttrIDs[attr] = 'de{}'.format(n)
+    dataCount = 0
+    for attrName in mGraph.nodeAttrSpecs.keys():
+        nodeAttrIDs[attrName] = 'd{}'.format(dataCount)
+        dataCount += 1
+
+    for attrName in mGraph.edgeAttrSpecs.keys():
+        edgeAttrIDs[attrName] = 'd{}'.format(dataCount)
+        dataCount += 1
+
+    edgeAttrIDs[EDGE_RELATION_ATTR] = 'd{}'.format(dataCount)
+    dataCount += 1
 
     nodeIDs = {}
     for n, node in enumerate(mGraph.nodes()):
-        nodeIDs[node] = 'n{}'.format(n)
+        if isinstance(node, int):
+            nodeIDs[node] = 'n{}'.format(node)
+        elif isinstance(node, str):
+            nodeIDs[node] = node
+        else:
+            nodeIDs[node] = 'n{}'.format(n)
 
     baseName = os.path.basename(filePath)
     (graphName, ext) = os.path.splitext(baseName)
     if len(ext) == 0:
         filePath += '.graphml'
 
+    for attrSpec in mGraph.nodeAttrSpecs.values():
+        key  = ET.SubElement(root, 'key')
+        key.set('id', nodeAttrIDs[attrSpec.name])
+        key.set('for', 'node')
+        key.set('attr.name', attrSpec.name)
+        key.set('attr.type', attrSpec.type)
+        if attrSpec.default is not None:
+            default = ET.SubElement(key, 'default')
+            default.text = str(attrSpec.default)
+        
+    for attrSpec in mGraph.edgeAttrSpecs.values():
+        key  = ET.SubElement(root, 'key')
+        key.set('id', edgeAttrIDs[attrSpec.name])
+        key.set('for', 'node')
+        key.set('attr.name', attrSpec.name)
+        key.set('attr.type', attrSpec.type)
+        if attrSpec.default is not None:
+            default = ET.SubElement(key, 'default')
+            default.text = str(attrSpec.default)
+
     key  = ET.SubElement(root, 'key')
     key.set('id', edgeAttrIDs[EDGE_RELATION_ATTR])
     key.set('for', 'edge')
     key.set('attr.name', EDGE_RELATION_ATTR)
     key.set('attr.type', 'int')
+    default = ET.SubElement(key, 'default')
+    default.text = str(0)
 
     graph = ET.SubElement(root, 'graph')
     graph.set('id',graphName)
@@ -296,20 +368,106 @@ def writeGraphml(mGraph, filePath):
     for vert in mGraph.nodes():
         node = ET.SubElement(graph, 'node')
         node.set('id', nodeIDs[vert])
-        #for j in range(len(vert.refElem)):
-        #    data = ET.SubElement(node, 'data')
-        #    data.set('key', getNodeAttr(j))
-        #    data.text = '{:f}'.format(vert.refElem[j])
+        for spec in mGraph.nodeAttrSpecs.values():
+            value = mGraph.getNodeAttr(vert, spec.name, spec.default)
+            if value != spec.default:
+                data = ET.SubElement(node, 'data')
+                data.set('key', nodeAttrIDs[spec.name])
+                data.text = '{}'.format(value)
     for v1, v2, rel in mGraph.edges():
         edge = ET.SubElement(graph, 'edge')
         edge.set('source', nodeIDs[v1])
         edge.set('target', nodeIDs[v2])
-        data = ET.SubElement(edge, 'data')
-        data.set('key',
-                edgeAttrIDs[EDGE_RELATION_ATTR])
-        data.text = '{}'.format(rel)
+        if rel != 0:
+            data = ET.SubElement(edge, 'data')
+            data.set('key',
+                    edgeAttrIDs[EDGE_RELATION_ATTR])
+            data.text = str(rel)
+        for spec in mGraph.edgeAttrSpecs.values():
+            value = mGraph.getEdgeAttr((v1,v2,rel), spec.name, spec.default)
+            if value != spec.default:
+                data = ET.SubElement(edge, 'data')
+                data.set('key', edgeAttrIDs[spec.name])
+                data.text = '{}'.format(value)
     tree = ET.ElementTree(root)
     tree.write(filePath)
+
+def loadGraphml(fileName):
+    xtree = ET.parse(fileName)
+
+    namespaces = {'g':"http://graphml.graphdrawing.org/xmlns"}
+
+    edgeAttrs = {}
+    nodeAttrs = {}
+    relationKey = None
+    for xkey in xtree.iterfind('g:key',namespaces):
+        attrName = xkey.get('attr.name')
+        attrType = xkey.get('attr.type')
+        if attrType in AttrSpec.VALID_TYPES:
+            attrSpec = AttrSpec(attrName, attrType)
+            if xkey.get('for') == 'edge':
+                edgeAttrs[xkey.get('id')] = attrSpec
+                if attrSpec.name == EDGE_RELATION_ATTR and attrSpec.type == 'int':
+                    relationKey = xkey.get('id')
+            elif xkey.get('for') == 'node':
+                nodeAttrs[xkey.get('id')] = attrSpec
+
+            xdefault = xkey.find('g:default', namespaces)
+            if xdefault is not None:
+                attrSpec.setDefault(xdefault.text.strip())
+
+    xgraph = xtree.find('g:graph', namespaces)
+    graph = MultiGraph()
+
+    for xnode in xgraph.iterfind('g:node', namespaces):
+        nid = xnode.get('id')
+        graph.addNode(nid)
+        for key in nodeAttrs.keys():
+            if nodeAttrs[key].default is not None:
+                attrSpec = nodeAttrs[key]
+                graph.setNodeAttr(nid, attrSpec.name,
+                    attrSpec.default)
+        for xdata in xnode.iterfind('g:data', namespaces):
+            key = xdata.get('key')
+            if key in nodeAttrs:
+                attrSpec = nodeAttrs[key]
+                graph.setNodeAttr(nid, attrSpec.name,
+                    attrSpec.strToType(xdata.text))
+
+    for xedge in xgraph.iterfind('g:edge', namespaces):
+        src = xedge.get('source')
+        tgt = xedge.get('target')
+        rel = None
+        if relationKey is not None:
+            xdata = xedge.find("g:data[@key='"+relationKey+"']", namespaces)
+            if xdata is not None:
+                rel = edgeAttrs[relationKey].strToType(xdata.text)
+        if rel is None:
+            rel = 0
+            while graph.hasEdge(src,tgt,rel):
+                rel += 1
+        edge = (src, tgt, rel)
+        graph.addEdge(src, tgt, rel)
+        for key in edgeAttrs.keys():
+            if key != relationKey and edgeAttrs[key].default is not None:
+                attrSpec = edgeAttrs[key]
+                graph.setEdgeAttr(edge, attrSpec.name,
+                    attrSpec.default)
+        for xdata in xedge.iterfind('g:data', namespaces):
+            key = xdata.get('key')
+            if key in edgeAttrs and key != relationKey:
+                attrSpec = edgeAttrs[key]
+                graph.setEdgeAttr(edge, attrSpec.name,
+                    attrSpec.strToType(xdata.text))
+
+    for attrSpec in nodeAttrs.values():
+        graph.addNodeAttrSpec(attrSpec)
+
+    for attrSpec in edgeAttrs.values():
+        if attrSpec.name != EDGE_RELATION_ATTR:
+            graph.addEdgeAttrSpec(attrSpec)
+
+    return graph
 
 if __name__ == "__main__":
     import random
