@@ -6,22 +6,31 @@ import xml.etree.ElementTree as ET
 EDGE_RELATION_ATTR='_relation'
 
 def regularEquivalence(graph):
+    """Cria um mapeamento dos nodos do grafo a uma classe de equivalência
+    regular.
+    
+    :param graph: Grafo a ser processado
+    :return: mapa de nodos a um inteiro que representa a classe de
+        equivalência a que pertence.
+    """
     # Todos os vértices começam na classe de equivalência 0.
     # Iremos processar os vértices em sequência numérica e atribuiremos as
     # clases de tal forma que o número de uma classe seja igual ao número do
     # vértice de menor número pertencente àquela classe.
-    classesAnt = {node:None for node in graph.nodes()}
+    nodeNumber = {}
+    for n, node in enumerate(graph.nodes()):
+        nodeNumber[node] = n
+    classesAnt = {node:0 for node in graph.nodes()}
     classesNow = {node:None for node in graph.nodes()}
     changed = True
 
     while changed:
-        print(classesAnt)
         changed = False
         for n1 in graph.nodes():
             if classesNow[n1] is not None:
                 continue
 
-            classesNow[n1] = n1
+            classesNow[n1] = nodeNumber[n1]
             if classesNow[n1] != classesAnt[n1]:
                 changed = True
 
@@ -46,7 +55,7 @@ def regularEquivalence(graph):
                 classesOutN2 = {(classesAnt[v], r) for v, r in graph.outNeighboors(n2)}
 
                 if classesInN1 == classesInN2 and classesOutN1 == classesOutN2:
-                    classesNow[n2] = n1
+                    classesNow[n2] = classesNow[n1]
                     if classesNow[n2] != classesAnt[n2]:
                         changed = True
 
@@ -112,8 +121,14 @@ class MultiGraph(object):
     def addNodeAttrSpec(self, attrSpec):
         self.nodeAttrSpecs[attrSpec.name] = attrSpec
 
+    def getNodeAttrSpec(self, attrName):
+        return self.nodeAttrSpecs.get(attrName)
+
     def addEdgeAttrSpec(self, attrSpec):
         self.edgeAttrSpecs[attrSpec.name] = attrSpec
+
+    def getEdgeAttrSpec(self, attrName):
+        return self.edgeAttrSpecs.get(attrName)
 
     def getNodeAttrValueSet(self, attrName, default=None):
         valueSet = set()
@@ -163,6 +178,8 @@ class MultiGraph(object):
         """
 
         classes = regularEquivalence(self)
+        spec = AttrSpec(classAttr,'int')
+        self.addNodeAttrSpec(spec)
         self.setNodeAttrFromDict(classAttr, classes)
 
     def spawnFromClassAttributes(self, nodeClassAttr=None, edgeClassAttr=None,
@@ -217,14 +234,26 @@ class MultiGraph(object):
                     nodeClass(src), nodeClass(tgt), edgeClass(edge))
 
         if nodeClassAttr is not None:
+            spec = self.getNodeAttrSpec(nodeClassAttr)
+            if spec is not None:
+                newGraph.addNodeAttrSpec(spec)
             for node in newGraph.nodes():
                 newGraph.nodeAttrs[node][nodeClassAttr] = node
 
         if edgeClassAttr is not None:
+            spec = self.getEdgeAttrSpec(edgeClassAttr)
+            if spec is not None:
+                newGraph.addEdgeAttrSpec(spec)
             for edge in newGraph.edges():
-                newGraph.edgeAttrs[edges][edgeClassAttr] = edge[2]
+                newGraph.edgeAttrs[edge][edgeClassAttr] = edge[2]
 
         return newGraph
+
+    def writeDotFile(self, filePath, classAttr='class'):
+        writeDotFile(self, filePath, classAttr)
+
+    def writeGraphml(self, filePath):
+        writeGraphml(self, filePath)
 
 def writeDotFile(graph, filePath, classAttr='class'):
     nodeColor = {}
@@ -296,7 +325,17 @@ class AttrSpec(object):
             dfltValue = self.strToType(dfltValue)
         self.default = dfltValue
 
-def writeGraphml(mGraph, filePath):
+    def forceDefault(self):
+        if self.type == 'float' or self.type == 'double':
+            self.default = 0.0
+        if self.type == 'int' or self.type == 'long':
+            self.default = 0
+        if self.type == 'boolean':
+            self.default = False
+        else:
+            self.default = ''
+
+def writeGraphml(mGraph, filePath, encoding="UTF-8"):
     root = ET.Element('graphml')
     root.set('xmlns',
             'http://graphml.graphdrawing.org/xmlns')
@@ -316,9 +355,6 @@ def writeGraphml(mGraph, filePath):
     for attrName in mGraph.edgeAttrSpecs.keys():
         edgeAttrIDs[attrName] = 'd{}'.format(dataCount)
         dataCount += 1
-
-    edgeAttrIDs[EDGE_RELATION_ATTR] = 'd{}'.format(dataCount)
-    dataCount += 1
 
     nodeIDs = {}
     for n, node in enumerate(mGraph.nodes()):
@@ -354,14 +390,6 @@ def writeGraphml(mGraph, filePath):
             default = ET.SubElement(key, 'default')
             default.text = str(attrSpec.default)
 
-    key  = ET.SubElement(root, 'key')
-    key.set('id', edgeAttrIDs[EDGE_RELATION_ATTR])
-    key.set('for', 'edge')
-    key.set('attr.name', EDGE_RELATION_ATTR)
-    key.set('attr.type', 'int')
-    default = ET.SubElement(key, 'default')
-    default.text = str(0)
-
     graph = ET.SubElement(root, 'graph')
     graph.set('id',graphName)
     graph.set('edgedefault','directed')
@@ -378,11 +406,6 @@ def writeGraphml(mGraph, filePath):
         edge = ET.SubElement(graph, 'edge')
         edge.set('source', nodeIDs[v1])
         edge.set('target', nodeIDs[v2])
-        if rel != 0:
-            data = ET.SubElement(edge, 'data')
-            data.set('key',
-                    edgeAttrIDs[EDGE_RELATION_ATTR])
-            data.text = str(rel)
         for spec in mGraph.edgeAttrSpecs.values():
             value = mGraph.getEdgeAttr((v1,v2,rel), spec.name, spec.default)
             if value != spec.default:
@@ -390,9 +413,9 @@ def writeGraphml(mGraph, filePath):
                 data.set('key', edgeAttrIDs[spec.name])
                 data.text = '{}'.format(value)
     tree = ET.ElementTree(root)
-    tree.write(filePath)
+    tree.write(filePath, encoding=encoding, xml_declaration=True, method="xml")
 
-def loadGraphml(fileName):
+def loadGraphml(fileName, relationAttr=EDGE_RELATION_ATTR):
     xtree = ET.parse(fileName)
 
     namespaces = {'g':"http://graphml.graphdrawing.org/xmlns"}
@@ -407,7 +430,7 @@ def loadGraphml(fileName):
             attrSpec = AttrSpec(attrName, attrType)
             if xkey.get('for') == 'edge':
                 edgeAttrs[xkey.get('id')] = attrSpec
-                if attrSpec.name == EDGE_RELATION_ATTR and attrSpec.type == 'int':
+                if attrSpec.name == relationAttr:
                     relationKey = xkey.get('id')
             elif xkey.get('for') == 'node':
                 nodeAttrs[xkey.get('id')] = attrSpec
@@ -415,6 +438,10 @@ def loadGraphml(fileName):
             xdefault = xkey.find('g:default', namespaces)
             if xdefault is not None:
                 attrSpec.setDefault(xdefault.text.strip())
+
+            if relationKey is not None:
+                # Forcing relation attribute to have a default
+                edgeAttrs[relationKey].forceDefault()
 
     xgraph = xtree.find('g:graph', namespaces)
     graph = MultiGraph()
@@ -439,23 +466,25 @@ def loadGraphml(fileName):
         tgt = xedge.get('target')
         rel = None
         if relationKey is not None:
+            attrSpec = edgeAttrs[relationKey]
+            rel = attrSpec.default
             xdata = xedge.find("g:data[@key='"+relationKey+"']", namespaces)
             if xdata is not None:
-                rel = edgeAttrs[relationKey].strToType(xdata.text)
-        if rel is None:
+                rel = attrSpec.strToType(xdata.text)
+        else:
             rel = 0
             while graph.hasEdge(src,tgt,rel):
                 rel += 1
         edge = (src, tgt, rel)
         graph.addEdge(src, tgt, rel)
-        for key in edgeAttrs.keys():
-            if key != relationKey and edgeAttrs[key].default is not None:
+        for key in edgeAttrs:
+            if edgeAttrs[key].default is not None:
                 attrSpec = edgeAttrs[key]
                 graph.setEdgeAttr(edge, attrSpec.name,
                     attrSpec.default)
         for xdata in xedge.iterfind('g:data', namespaces):
             key = xdata.get('key')
-            if key in edgeAttrs and key != relationKey:
+            if key in edgeAttrs:
                 attrSpec = edgeAttrs[key]
                 graph.setEdgeAttr(edge, attrSpec.name,
                     attrSpec.strToType(xdata.text))
