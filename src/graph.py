@@ -258,7 +258,7 @@ def writeDotFile(graph, filePath, classAttr='class'):
         f.write('  node [label="\\N", style=filled];\n')
 
         for node in graph.nodes():
-            f.write('  {0} [fillcolor="{1}"];\n'.format(
+            f.write('  "{0}" [fillcolor="{1}"];\n'.format(
                 node,
                 nodeColor.get(
                     graph.nodeAttrs[node].get(classAttr,0),
@@ -268,10 +268,10 @@ def writeDotFile(graph, filePath, classAttr='class'):
 
         for node in graph.nodes():
             for node2, rel in graph.outNeighboors(node):
-                f.write('  {0} -> {1} [color="{2}"];\n'.format(node, node2,
+                f.write('  "{0}" -> "{1}" [color="{2}"];\n'.format(node, node2,
                             edgeColor.get(rel,'0.0,0.0,1.0')))
 
-        f.write('}}\n')
+        f.write('}\n')
 
 class AttrSpec(object):
     VALID_TYPES = ('float','double','int','long','boolean','string')
