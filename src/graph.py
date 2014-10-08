@@ -84,6 +84,22 @@ class MultiGraph(object):
             self._adjIn[node] = set()
             self.nodeAttrs[node] = {}
 
+    def removeNode(self, node):
+        if node in self._adjOut:
+            del self._adjOut[node]
+        if node in self._adjIn:
+            del self._adjIn[node]
+        if node in self.nodeAttrs:
+            del self.nodeAttrs[node]
+
+    def removeNodeByAttr(self, attrName, attrValue):
+        def filterNodes(node):
+            return self.getNodeAttr(node, attrName) == attrValue
+
+        toRemove = list(filter(filterNodes, self.nodes()))
+        for node in toRemove:
+            self.removeNode(node)
+
     def addEdge(self, source, target, relation):
         edgeTuple = (source, target, relation)
 
@@ -99,6 +115,21 @@ class MultiGraph(object):
         self._adjIn[target].add( (source, relation) )
         self.edgeAttrs[edgeTuple] = {}
         self.relations.add(relation)
+
+    def removeEdge(self, source, target, relation):
+        self._adjOut[source].discard((target, relation))
+        self._adjIn[target].discard((source, relation))
+        edge = (source, target, relation)
+        if edge in self.edgeAttrs:
+            del self.edgeAttrs[edge]
+
+    def removeEdgeByAttr(self, attrName, attrValue):
+        def filterEdges(edge):
+            return self.getEdgeAttr(edge, attrName) == attrValue
+
+        toRemove = list(filter(filterEdges, self.edges()))
+        for src, tgt, rel in toRemove:
+            self.removeEdge(src, tgt, rel)
 
     def nodes(self):
         return self._adjOut.keys()
@@ -143,6 +174,12 @@ class MultiGraph(object):
             if value is not None:
                 self.nodeAttrs[node][attrName] = value
 
+    def setEdgeAttrFromDict(self, attrName, attrDict, default=None):
+        for edge in self.edges():
+            value = attrDict.get(edge, default)
+            if value is not None:
+                self.edgeAttrs[edge][attrName] = value
+
     def getNodeAttrNames(self):
         names = set()
         for attrDict in self.nodeAttrs.values():
@@ -183,7 +220,7 @@ class MultiGraph(object):
         self.setNodeAttrFromDict(classAttr, classes)
 
     def spawnFromClassAttributes(self, nodeClassAttr=None, edgeClassAttr=None,
-            nodeClassDflt=0, edgeClassDflt=0):
+            nodeClassDflt=None, edgeClassDflt=None):
         """Cria um novo grafo cujos nodos são as classes de equivalência de
         nodos do grafo original e as relações das arestas são as classes de
         equivalência de arestas do grafo original de tal forma que o mapeamento
@@ -225,13 +262,21 @@ class MultiGraph(object):
 
         newGraph = MultiGraph()
 
+        nodeHits = {}
+        edgeHits = {}
+
         for node in self.nodes():
-            newGraph.addNode(nodeClass(node))
+            newNode = nodeClass(node)
+            newGraph.addNode(newNode)
+            count = nodeHits.get(newNode,0)
+            nodeHits[newNode] = count + 1
 
         for edge in self.edges():
             src, tgt, rel = edge
-            newGraph.addEdge(
-                    nodeClass(src), nodeClass(tgt), edgeClass(edge))
+            newEdge = (nodeClass(src), nodeClass(tgt), edgeClass(edge))
+            newGraph.addEdge(newEdge[0], newEdge[1], newEdge[2])
+            count = edgeHits.get(newEdge, 0)
+            edgeHits[newEdge] = count + 1
 
         if nodeClassAttr is not None:
             spec = self.getNodeAttrSpec(nodeClassAttr)
@@ -246,6 +291,12 @@ class MultiGraph(object):
                 newGraph.addEdgeAttrSpec(spec)
             for edge in newGraph.edges():
                 newGraph.edgeAttrs[edge][edgeClassAttr] = edge[2]
+
+        spec = AttrSpec('hitCount', 'int', 1)
+        newGraph.setNodeAttrFromDict('hitCount', nodeHits, 0)
+        newGraph.addNodeAttrSpec(spec)
+        newGraph.setEdgeAttrFromDict('hitCount', edgeHits, 0)
+        newGraph.addEdgeAttrSpec(spec)
 
         return newGraph
 
@@ -305,10 +356,10 @@ def writeDotFile(graph, filePath, classAttr='class'):
 class AttrSpec(object):
     VALID_TYPES = ('float','double','int','long','boolean','string')
 
-    def __init__(self, attr_name, attr_type):
+    def __init__(self, attr_name, attr_type, default=None):
         self.name = attr_name
         self.type = attr_type
-        self.default = None
+        self.default = default
 
     def strToType(self, strValue):
         if self.type == 'float' or self.type == 'double':
@@ -383,7 +434,7 @@ def writeGraphml(mGraph, filePath, encoding="UTF-8"):
     for attrSpec in mGraph.edgeAttrSpecs.values():
         key  = ET.SubElement(root, 'key')
         key.set('id', edgeAttrIDs[attrSpec.name])
-        key.set('for', 'node')
+        key.set('for', 'edge')
         key.set('attr.name', attrSpec.name)
         key.set('attr.type', attrSpec.type)
         if attrSpec.default is not None:
@@ -493,8 +544,7 @@ def loadGraphml(fileName, relationAttr=EDGE_RELATION_ATTR):
         graph.addNodeAttrSpec(attrSpec)
 
     for attrSpec in edgeAttrs.values():
-        if attrSpec.name != EDGE_RELATION_ATTR:
-            graph.addEdgeAttrSpec(attrSpec)
+        graph.addEdgeAttrSpec(attrSpec)
 
     return graph
 
