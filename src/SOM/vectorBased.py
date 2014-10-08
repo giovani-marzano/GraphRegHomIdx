@@ -1,8 +1,7 @@
 # coding: utf-8
-"""Implementação de um SOM de crescimento dinâmico ( growing SOM ) baseao do em
-vetores, ou seja, os elementos apresentados ao SOM são pontos em um espaço n
-dimensional. A distância entre os elementos é a distância euclidiana entre os
-pontos.
+"""Implementação de um SOM baseao do vetores, ou seja, os elementos apresentados
+ao SOM são pontos em um espaço n dimensional. A distância entre os elementos é a
+distância euclidiana entre os pontos.
 """
 
 __author__ = "Giovani Melo Marzano"
@@ -121,7 +120,15 @@ class SOMNode(AbstractSOMNode):
 
 
 class SOMap(AbstractSOMap):
-    """Um mapa auto organizável.
+    """Um mapa auto organizável que opera sobre vetores numéricos.
+
+    Atributos:
+
+    - conf: Objeto de configuração que pode ser ajustado antes do treinamento para
+        controlar parâmetros do treinamento. Veja documentação para a classe Config.
+
+    - nodes: Lista dos nodos do SOM. Começa vazia e é preenchida durante o
+        treinamento.
     """
 
     def __init__(self, mID='top'):
@@ -182,6 +189,12 @@ class SOMap(AbstractSOMap):
         ))
 
     def trainHexGrid(self, nrows, ncols):
+        """Inicializa e treina um SOM com a topologia de uma grade hexagonal.
+        Cada nodo, excetuando os das bordas, possuem 6 vizinhos.
+
+        :param nrows: Número de linhas da grade.
+        :param ncols: Número de colunas da grade.
+        """
 
         self.doMST = False
         self.numSteps = 0

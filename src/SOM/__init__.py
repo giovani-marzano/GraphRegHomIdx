@@ -31,7 +31,7 @@ class Config(object):
       variância não explicada que, quando atingido, causa a parada do
       crescimento do SOM.
 
-    - MSTPeriod: De quantas em quantas iteracoes realizar o calculo da arvore
+    - MSTPeriod: De quantas em quantas iteracoes realizar o calculo da árvore
       geradora mínima (Minimal Spanning Tree).
 
     Constantes:
@@ -89,6 +89,8 @@ class Config(object):
         assim por diante.
 
         :param nv: Nivel de vizinhança
+
+        :return: Peso do vizinho no intervalo [0,1]
         """
 
         w = (self.neighWeight - 1.0)*nv + 1.0
@@ -150,6 +152,12 @@ class AbstractSOMap(object):
         self._mstParent = None
 
     def findNodeForElem(self, elem):
+        """Encontra o nodo de menor distancia ao elemento.
+
+        :param elem: Elemento a ser testado
+
+        :return: (nodo, distancia)
+        """
         bestNode = self.nodes[0]
         bestDist = bestNode.distSq(elem)
 
@@ -162,10 +170,15 @@ class AbstractSOMap(object):
         return (bestNode, bestDist)
 
     def _assignOneElement(self, elem):
+        """Atribui um elemento a seu nodo mais próximo.
+        """
         (bestNode, bestDist) = self.findNodeForElem(elem)
         bestNode.insert(elem, bestDist)
 
     def _assignElements(self):
+        """Distribui todos os elementos do conjunto de treinamento entre os
+        nodos do SOM.
+        """
 
         for elem in self.elements:
             self._assignOneElement(elem)
@@ -223,6 +236,8 @@ class AbstractSOMap(object):
         ))
 
     def train(self):
+        """Treina o nodo com o conjunto de treinamento setado em 'elements'.
+        """
 
         trainSteps = 0
 
@@ -284,7 +299,9 @@ class AbstractSOMap(object):
         return True
 
     def trainGrowingTree(self):
-        """Realiza o processo de treinar e aumentar o SOM.
+        """Treina um SOM com a topologia de uma árvore em que o número de nodos
+        começa com 1 e vai aumentando até uma das condições de parada serem
+        atingidas.
         """
 
         print("\n---- " + self.ID +" ----")
