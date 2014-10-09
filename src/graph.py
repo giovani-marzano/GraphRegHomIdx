@@ -250,6 +250,9 @@ class MultiGraph(object):
         def nodeClassByAttr(node):
             return self.nodeAttrs[node].get(nodeClassAttr, nodeClassDflt)
 
+        def nodeIdentity(node):
+            return node
+
         def edgeClassByAttr(edge):
             return self.edgeAttrs[edge].get(edgeClassAttr, edgeClassDflt)
 
@@ -259,7 +262,7 @@ class MultiGraph(object):
         if nodeClassAttr is not None:
             nodeClass = nodeClassByAttr
         else:
-            nodeClass = id
+            nodeClass = nodeIdentity
 
         if edgeClassAttr is not None:
             edgeClass = edgeClassByAttr
