@@ -198,12 +198,18 @@ class MultiGraph(object):
         self.nodeAttrs[node][attr] = value
 
     def getNodeAttr(self, node, attr, dflt=None):
+        spec = self.nodeAttrSpecs.get(attr)
+        if spec != None and spec.default != None:
+            dflt = spec.default
         return self.nodeAttrs[node].get(attr, dflt)
 
     def setEdgeAttr(self, edge, attr, value):
         self.edgeAttrs[edge][attr] = value
 
     def getEdgeAttr(self, edge, attr, dflt=None):
+        spec = self.edgeAttrSpecs.get(attr)
+        if spec != None and spec.default != None:
+            dflt = spec.default
         return self.edgeAttrs[edge].get(attr, dflt)
 
     def classifyNodesRegularEquivalence(self, classAttr='class'):
@@ -373,18 +379,9 @@ class AttrSpec(object):
 
     def setDefault(self,dfltValue):
         if isinstance(dfltValue, str):
-            dfltValue = self.strToType(dfltValue)
+            dfltValue = self.strToType(dfltValue.strip())
         self.default = dfltValue
 
-    def forceDefault(self):
-        if self.type == 'float' or self.type == 'double':
-            self.default = 0.0
-        if self.type == 'int' or self.type == 'long':
-            self.default = 0
-        if self.type == 'boolean':
-            self.default = False
-        else:
-            self.default = ''
 
 def writeGraphml(mGraph, filePath, encoding="UTF-8"):
     root = ET.Element('graphml')
@@ -488,11 +485,7 @@ def loadGraphml(fileName, relationAttr=EDGE_RELATION_ATTR):
 
             xdefault = xkey.find('g:default', namespaces)
             if xdefault is not None:
-                attrSpec.setDefault(xdefault.text.strip())
-
-            if relationKey is not None:
-                # Forcing relation attribute to have a default
-                edgeAttrs[relationKey].forceDefault()
+                attrSpec.setDefault(xdefault.text)
 
     xgraph = xtree.find('g:graph', namespaces)
     graph = MultiGraph()
