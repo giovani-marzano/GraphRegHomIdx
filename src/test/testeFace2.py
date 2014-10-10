@@ -14,6 +14,12 @@ def grafoSoUmTipoAresta(a, tipo):
     print(tipo, len(b.nodes()), len(b.edges()))
 
     b.classifyNodesRegularEquivalence('class')
+    attrName = 'class '+tipo
+    spec = gr.AttrSpec(attrName, 'int')
+    a.addNodeAttrSpec(spec)
+    for node in b.nodes():
+        a.setNodeAttr(node, attrName, b.getNodeAttr(node, 'class'))
+
     b = b.spawnFromClassAttributes(nodeClassAttr='class',
             edgeClassAttr='Relationship')
     b.writeGraphml(tipo)
@@ -24,8 +30,11 @@ print('Original', len(a.nodes()), len(a.edges()))
 a = a.spawnFromClassAttributes(edgeClassAttr='Relationship')
 print('Relationship', len(a.nodes()), len(a.edges()))
 
-grafoSoUmTipoAresta(a, 'Friend')
 grafoSoUmTipoAresta(a, 'Commenter')
 grafoSoUmTipoAresta(a, 'Post Author')
 grafoSoUmTipoAresta(a, 'User Tagged')
 grafoSoUmTipoAresta(a, 'Liker')
+
+print('Salvando faceMarcado...')
+a.writeGraphml('faceMarcado')
+print('...ok')
