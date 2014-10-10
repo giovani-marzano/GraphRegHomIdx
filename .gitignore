@@ -1,3 +1,4 @@
 *.pyc
+data/
 src/test/data
 src/test/img
