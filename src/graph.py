@@ -2,6 +2,7 @@
 
 import os.path
 import xml.etree.ElementTree as ET
+from collections import Counter, defaultdict
 
 EDGE_RELATION_ATTR='_relation'
 
@@ -168,17 +169,29 @@ class MultiGraph(object):
 
         return valueSet
 
-    def setNodeAttrFromDict(self, attrName, attrDict, default=None):
+    def setNodeAttrFromDict(self, attrName, attrDict, default=None,
+            attrType=None):
         for node in self.nodes():
             value = attrDict.get(node, default)
             if value is not None:
                 self.nodeAttrs[node][attrName] = value
 
-    def setEdgeAttrFromDict(self, attrName, attrDict, default=None):
+        if attrType != None:
+            spec = AttrSpec(attrName, attrType)
+            spec.default = None
+            self.addNodeAttrSpec(spec)
+
+    def setEdgeAttrFromDict(self, attrName, attrDict, default=None,
+            attrType=None):
         for edge in self.edges():
             value = attrDict.get(edge, default)
             if value is not None:
                 self.edgeAttrs[edge][attrName] = value
+
+        if attrType != None:
+            spec = AttrSpec(attrName, attrType)
+            spec.default = None
+            self.addEdgeAttrSpec(spec)
 
     def getNodeAttrNames(self):
         names = set()
@@ -248,13 +261,13 @@ class MultiGraph(object):
         :return: Grafo gerado
         """
         def nodeClassByAttr(node):
-            return self.nodeAttrs[node].get(nodeClassAttr, nodeClassDflt)
+            return self.getNodeAttr(node, nodeClassAttr, nodeClassDflt)
 
         def nodeIdentity(node):
             return node
 
         def edgeClassByAttr(edge):
-            return self.edgeAttrs[edge].get(edgeClassAttr, edgeClassDflt)
+            return self.getEdgeAttr(edge, edgeClassAttr, edgeClassDflt)
 
         def edgeClassByRelation(edge):
             return edge[2]
@@ -301,11 +314,8 @@ class MultiGraph(object):
             for edge in newGraph.edges():
                 newGraph.edgeAttrs[edge][edgeClassAttr] = edge[2]
 
-        spec = AttrSpec('hitCount', 'int', 1)
-        newGraph.setNodeAttrFromDict('hitCount', nodeHits, 0)
-        newGraph.addNodeAttrSpec(spec)
-        newGraph.setEdgeAttrFromDict('hitCount', edgeHits, 0)
-        newGraph.addEdgeAttrSpec(spec)
+        newGraph.setNodeAttrFromDict('hitCount', nodeHits, 0, 'int')
+        newGraph.setEdgeAttrFromDict('hitCount', edgeHits, 0, 'int')
 
         return newGraph
 
@@ -384,6 +394,112 @@ class AttrSpec(object):
         if isinstance(dfltValue, str):
             dfltValue = self.strToType(dfltValue.strip())
         self.default = dfltValue
+
+
+def agregateClassAttr(gOri, nodeClassAttr=None, edgeClassAttr=None, nodeAttrs=None, edgeAttrs=None):
+    """Cria dados agregados de atributos agrupados pelos valores dos atributos
+    classificadores de nodos e arestas fornecidos.
+
+    :param nodeClassAttr: Atributo de nodo usado para classificar os nodos.
+    :param edgeClassAttr: Atributo de aresta usado para classificar as arestas.
+    :param nodeAttrs: Lista dos atributos de nodos que devem ser agregados.
+    :param edgeAttrs: Lista dos atributos de arestas que devem ser agregados.
+
+    :return: (attrNodes, attrEdges, specNodes, specEdges), onde:
+
+        attrNodes: Dicionario que associa cada atributo gerado a um dicionário
+            com o valor do atributo para cada nodo.
+        attrEdges: Mesmo que attrNodes para as arestas.
+        specNodes: Lista de AttrSpecs que para os atributos de nodos gerados.
+        specEdges: Mesmo que specNodes só que para arestas.
+
+    Esta função visa fornecer a funcionalidade de uma agreção em SQL como a
+    seguir::
+
+        select count(*), avg(attr), stdev(attr) from nodes group by
+        nodeClassAttr;
+    """
+
+    if nodeClassAttr != None:
+        nodeClassFun = lambda n: gOri.getNodeAttr(n, nodeClassAttr)
+    else:
+        nodeClassFun = lambda n: n
+        nodeClassAttr='node'
+
+    if edgeClassAttr != None:
+        edgeRelFun = lambda e: gOri.getEdgeAttr(e, edgeClassAttr)
+    else:
+        edgeRelFun = lambda e: e[2]
+        edgeRelFun = 'edge'
+
+    if nodeAttrs == None:
+        nodeAttrs = []
+    if edgeAttrs == None:
+        edgeAttrs = []
+
+    edgeSrcSet = defaultdict(set)
+    edgeTgtSet = defaultdict(set)
+    nodeAttrSums = defaultdict(Counter)
+    edgeAttrSums = defaultdict(Counter)
+
+    nodeCountAttr = nodeClassAttr + '_count'
+    edgeCountAttr = edgeClassAttr + '_count'
+
+    for node in gOri.nodes():
+        nodeClass = nodeClassFun(node)
+        nodeAttrSums[nodeCountAttr][nodeClass] += 1
+        for attr in nodeAttrs:
+            value = gOri.getNodeAttr(node, attr)
+            if value != None:
+                nodeAttrSums[attr+'_count'][nodeClass] += 1
+                nodeAttrSums[attr+'_sum'][nodeClass] += value
+                nodeAttrSums[attr+'_sumSq'][nodeClass] += value * value
+
+    for (src, tgt, rel) in gOri.edges():
+        srcClass = nodeClassFun(src)
+        tgtClass = nodeClassFun(tgt)
+        relClass = edgeRelFun((src, tgt, rel))
+        edgeClass = (srcClass, tgtClass, relClass)
+        edgeAttrSums[edgeCountAttr][edgeClass] += 1
+        edgeSrcSet[edgeClass].add(src)
+        edgeTgtSet[edgeClass].add(tgt)
+        for attr in edgeAttrs:
+            value = gOri.getEdgeAttr((src, tgt, rel), attr)
+            if value != None:
+                edgeAttrSums[attr+'_count'][edgeClass] += 1
+                edgeAttrSums[attr+'_sum'][edgeClass] += value
+                edgeAttrSums[attr+'_sumSq'][edgeClass] += value * value
+
+    edgeSrcCountAttr = edgeClassAttr + '_srcCount'
+    edgeTgtCountAttr = edgeClassAttr + '_tgtCount'
+    for edge, s in edgeSrcSet.items():
+        edgeAttrSums[edgeSrcCountAttr][edge] = len(s)
+    for edge, s in edgeTgtSet.items():
+        edgeAttrSums[edgeTgtCountAttr][edge] = len(s)
+
+    nodeSpecs = []
+    nodeSpecs.append(AttrSpec(nodeCountAttr, 'int',0))
+    for attr in nodeAttrs:
+        attrName = attr+'_count'
+        nodeSpecs.append(AttrSpec(attrName, 'int',0))
+        attrName = attr+'_sum'
+        nodeSpecs.append(AttrSpec(attrName, 'double',0.0))
+        attrName = attr+'_sumSq'
+        nodeSpecs.append(AttrSpec(attrName, 'double',0.0))
+
+    edgeSpecs = []
+    edgeSpecs.append(AttrSpec(edgeCountAttr, 'int',0))
+    edgeSpecs.append(AttrSpec(edgeSrcCountAttr, 'int',0))
+    edgeSpecs.append(AttrSpec(edgeTgtCountAttr, 'int',0))
+    for attr in edgeAttrs:
+        attrName = attr+'_count'
+        edgeSpecs.append(AttrSpec(attrName, 'int',0))
+        attrName = attr+'_sum'
+        edgeSpecs.append(AttrSpec(attrName, 'double',0.0))
+        attrName = attr+'_sumSq'
+        edgeSpecs.append(AttrSpec(attrName, 'double',0.0))
+
+    return nodeAttrSums, edgeAttrSums, nodeSpecs, edgeSpecs
 
 
 def writeGraphml(mGraph, filePath, encoding="UTF-8"):
