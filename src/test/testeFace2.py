@@ -1,4 +1,7 @@
 import graph as gr
+import os.path
+
+DIR_DATA='data'
 
 def grafoSoUmTipoAresta(a, tipo):
     b = a.spawnFromClassAttributes(edgeClassAttr='Relationship')
@@ -22,10 +25,10 @@ def grafoSoUmTipoAresta(a, tipo):
 
     b = b.spawnFromClassAttributes(nodeClassAttr='class',
             edgeClassAttr='Relationship')
-    b.writeGraphml(tipo)
+    b.writeGraphml(os.path.join(DIR_DATA,tipo))
     print(tipo, len(b.nodes()), len(b.edges()))
 
-a = gr.loadGraphml('face.graphml')
+a = gr.loadGraphml(os.path.join(DIR_DATA,'face.graphml'))
 print('Original', len(a.nodes()), len(a.edges()))
 a = a.spawnFromClassAttributes(edgeClassAttr='Relationship')
 print('Relationship', len(a.nodes()), len(a.edges()))
@@ -36,5 +39,5 @@ grafoSoUmTipoAresta(a, 'User Tagged')
 grafoSoUmTipoAresta(a, 'Liker')
 
 print('Salvando faceMarcado...')
-a.writeGraphml('faceMarcado')
+a.writeGraphml(os.path.join(DIR_DATA,'faceMarcado'))
 print('...ok')
