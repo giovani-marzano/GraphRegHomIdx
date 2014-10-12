@@ -105,7 +105,7 @@ class MultiGraph(object):
     def addEdge(self, source, target, relation):
         edgeTuple = (source, target, relation)
 
-        if edgeTuple in self.edgeAttrs:
+        if self.hasEdge(source, target, relation):
             # Aresta já existe
             return
 
@@ -115,15 +115,15 @@ class MultiGraph(object):
             self.addNode(target)
         self._adjOut[source].add( (target, relation) )
         self._adjIn[target].add( (source, relation) )
-        self.edgeAttrs[edgeTuple] = {}
         self.relations.add(relation)
 
     def removeEdge(self, source, target, relation):
         self._adjOut[source].discard((target, relation))
         self._adjIn[target].discard((source, relation))
         edge = (source, target, relation)
-        if edge in self.edgeAttrs:
-            del self.edgeAttrs[edge]
+        for attrDict in self.edgeAttrs.values():
+            if edge in attrDict:
+                del attrDict[edge]
 
     def removeEdgeByAttr(self, attrName, attrValue):
         def filterEdges(edge):
@@ -137,7 +137,9 @@ class MultiGraph(object):
         return self._adjOut.keys()
 
     def edges(self):
-        return self.edgeAttrs.keys()
+        for src in self._adjOut.keys():
+            for tgt, rel in self._adjOut[src]:
+                yield (src, tgt, rel)
 
     def outNeighboors(self, node):
         return iter(self._adjOut[node])
@@ -149,7 +151,10 @@ class MultiGraph(object):
         return node in self._adjOut
 
     def hasEdge(self, src, tgt, rel):
-        return (src, tgt, rel) in self.edgeAttrs
+        if src in self._adjOut:
+            return (tgt, rel) in self._adjOut[src]
+        else:
+            return False
 
     def addNodeAttrSpec(self, attrSpec):
         self.nodeAttrSpecs[attrSpec.name] = attrSpec
@@ -190,10 +195,11 @@ class MultiGraph(object):
 
     def setEdgeAttrFromDict(self, attrName, attrDict, default=None,
             attrType=None):
+        self.edgeAttrs[attrName] = {}
         for edge in self.edges():
             value = attrDict.get(edge, default)
             if value is not None:
-                self.edgeAttrs[edge][attrName] = value
+                self.edgeAttrs[attrName][edge] = value
 
         if attrType != None:
             spec = AttrSpec(attrName, attrType)
@@ -201,16 +207,10 @@ class MultiGraph(object):
             self.addEdgeAttrSpec(spec)
 
     def getNodeAttrNames(self):
-        names = set(self.nodeAttrs.keys())
-
-        return names
+        return set(self.nodeAttrs.keys())
 
     def getEdgeAttrNames(self):
-        names = set()
-        for attrDict in self.edgeAttrs.values():
-            for name in attrDict.keys():
-                names.add(name)
-        return names
+        return set(self.edgeAttrs.keys())
 
     def setNodeAttr(self, node, attr, value):
         attrDict = self.nodeAttrs.setdefault(attr, {})
@@ -223,13 +223,14 @@ class MultiGraph(object):
         return self.nodeAttrs.get(attr, {}).get(node, dflt)
 
     def setEdgeAttr(self, edge, attr, value):
-        self.edgeAttrs[edge][attr] = value
+        attrDict = self.edgeAttrs.setdefault(attr, {})
+        attrDict[edge] = value
 
     def getEdgeAttr(self, edge, attr, dflt=None):
         spec = self.edgeAttrSpecs.get(attr)
         if spec != None and spec.default != None:
             dflt = spec.default
-        return self.edgeAttrs[edge].get(attr, dflt)
+        return self.edgeAttrs.get(attr, {}).get(edge, dflt)
 
     def classifyNodesRegularEquivalence(self, classAttr='class'):
         """Cria um atributo de nodos que os particiona em classes de
