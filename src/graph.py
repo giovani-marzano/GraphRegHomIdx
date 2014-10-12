@@ -4,6 +4,7 @@ import os.path
 import math
 import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
+from itertools import chain
 
 EDGE_RELATION_ATTR='_relation'
 
@@ -38,7 +39,7 @@ def regularEquivalence(graph):
 
             # Conjuntos das classes de equivalencia que possuem arestas
             # entrando e saindo de n1
-            classesInN1 = {(classesAnt[v], r) for v, r in graph.inNeighnoors(n1) }
+            classesInN1 = {(classesAnt[v], r) for v, r in graph.inNeighboors(n1) }
             classesOutN1 = {(classesAnt[v], r) for v, r in graph.outNeighboors(n1)}
 
             for n2 in graph.nodes():
@@ -53,7 +54,7 @@ def regularEquivalence(graph):
 
                 # Conjuntos das classes de equivalencia que possuem arestas
                 # entrando e saindo de n2
-                classesInN2 = {(classesAnt[v], r) for v, r in graph.inNeighnoors(n2)}
+                classesInN2 = {(classesAnt[v], r) for v, r in graph.inNeighboors(n2)}
                 classesOutN2 = {(classesAnt[v], r) for v, r in graph.outNeighboors(n2)}
 
                 if classesInN1 == classesInN2 and classesOutN1 == classesOutN2:
@@ -74,6 +75,8 @@ class MultiGraph(object):
     def __init__(self):
         self._adjOut = {}
         self._adjIn = {}
+        self._numNodes = 0
+        self._numEdges = 0
         self.nodeAttrs = {}
         self.edgeAttrs = {}
         self.relations = set()
@@ -84,10 +87,12 @@ class MultiGraph(object):
         if node not in self._adjOut:
             self._adjOut[node] = set()
             self._adjIn[node] = set()
+            self._numNodes += 1
 
     def removeNode(self, node):
         if node in self._adjOut:
             del self._adjOut[node]
+            self._numNodes -= 1
         if node in self._adjIn:
             del self._adjIn[node]
         for attrDict in self.nodeAttrs.values():
@@ -115,12 +120,15 @@ class MultiGraph(object):
             self.addNode(target)
         self._adjOut[source].add( (target, relation) )
         self._adjIn[target].add( (source, relation) )
+        self._numEdges += 1
         self.relations.add(relation)
 
     def removeEdge(self, source, target, relation):
-        self._adjOut[source].discard((target, relation))
-        self._adjIn[target].discard((source, relation))
-        edge = (source, target, relation)
+        if self.hasEdge(source, target, relation):
+            self._adjOut[source].discard((target, relation))
+            self._adjIn[target].discard((source, relation))
+            self._numEdges -= 1
+            edge = (source, target, relation)
         for attrDict in self.edgeAttrs.values():
             if edge in attrDict:
                 del attrDict[edge]
@@ -136,15 +144,21 @@ class MultiGraph(object):
     def nodes(self):
         return self._adjOut.keys()
 
+    def getNumNodes(self):
+        return self._numNodes
+
     def edges(self):
         for src in self._adjOut.keys():
             for tgt, rel in self._adjOut[src]:
                 yield (src, tgt, rel)
 
+    def getNumEdges(self):
+        return self._numEdges
+
     def outNeighboors(self, node):
         return iter(self._adjOut[node])
 
-    def inNeighnoors(self, node):
+    def inNeighboors(self, node):
         return iter(self._adjIn[node])
 
     def hasNode(self, node):
@@ -535,6 +549,38 @@ def agregateClassAttr(gOri, nodeClassAttr=None, edgeClassAttr=None, nodeAttrs=No
 
     return nodeAttrDicts, edgeAttrDicts, nodeSpecs, edgeSpecs
 
+
+def weaklyConnectedComponents(g):
+    """Associa a cada nodo do grafo a um número que representa a componente
+    fracamente conexa a que o nodo pertence.
+
+    :param g: grafo
+
+    :return: Dicionário mapeando cada nodo à sua componente.
+    """
+    components = {}
+    stack = []
+    compNum = 0
+
+    for node in g.nodes():
+        if node in components:
+            continue
+
+        compNum += 1
+        components[node] = compNum
+        stack.append(node)
+
+        while len(stack) > 0:
+            n1 = stack.pop()
+
+            for n2, r in chain(g.outNeighboors(n1), g.inNeighboors(n1)):
+                if n2 in components:
+                    continue
+                components[n2] = compNum
+                stack.append(n2)
+
+    return components
+            
 
 def writeGraphml(mGraph, filePath, encoding="UTF-8"):
     root = ET.Element('graphml')

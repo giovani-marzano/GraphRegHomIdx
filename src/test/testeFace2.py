@@ -6,7 +6,7 @@ DIR_DATA='data'
 def grafoSoUmTipoAresta(a, tipo):
     b = a.spawnFromClassAttributes(edgeClassAttr='Relationship')
 
-    print(tipo, len(b.nodes()), len(b.edges()))
+    print(tipo, b.getNumNodes(), b.getNumEdges())
     for edge in b.edges():
         if b.getEdgeAttr(edge, 'Relationship') == tipo:
             b.setEdgeAttr(edge, 'filtro', 1)
@@ -14,24 +14,42 @@ def grafoSoUmTipoAresta(a, tipo):
             b.setEdgeAttr(edge, 'filtro', 0)
 
     b.removeEdgeByAttr('filtro', 0)
-    print(tipo, len(b.nodes()), len(b.edges()))
+    print(tipo, b.getNumNodes(), b.getNumEdges())
 
     b.classifyNodesRegularEquivalence('class')
+    print("regular eqv ok")
     attrName = 'class '+tipo
     spec = gr.AttrSpec(attrName, 'int')
     a.addNodeAttrSpec(spec)
     for node in b.nodes():
         a.setNodeAttr(node, attrName, b.getNodeAttr(node, 'class'))
 
+    nodeAttrs, edgeAttrs, nodeSpecs, edgeSpecs = gr.agregateClassAttr(b,
+        nodeClassAttr='class', edgeClassAttr='Relationship',
+        edgeAttrs=['Edge Weight'])
+
     b = b.spawnFromClassAttributes(nodeClassAttr='class',
             edgeClassAttr='Relationship')
+
+    components = gr.weaklyConnectedComponents(b)
+    b.setNodeAttrFromDict('pattern',components, default=-1, attrType='int')
+
+    for spec in nodeSpecs:
+        b.addNodeAttrSpec(spec)
+        b.setNodeAttrFromDict(spec.name, nodeAttrs[spec.name])
+    for spec in edgeSpecs:
+        b.addEdgeAttrSpec(spec)
+        b.setEdgeAttrFromDict(spec.name, edgeAttrs[spec.name])
+
+    print(tipo, b.getNumNodes(), b.getNumEdges())
+
     b.writeGraphml(os.path.join(DIR_DATA,tipo))
-    print(tipo, len(b.nodes()), len(b.edges()))
+    print(tipo+' salvo')
 
 a = gr.loadGraphml(os.path.join(DIR_DATA,'face.graphml'))
-print('Original', len(a.nodes()), len(a.edges()))
+print('Original', a.getNumNodes(), a.getNumEdges())
 a = a.spawnFromClassAttributes(edgeClassAttr='Relationship')
-print('Relationship', len(a.nodes()), len(a.edges()))
+print('Relationship', a.getNumNodes(), a.getNumEdges())
 
 grafoSoUmTipoAresta(a, 'Commenter')
 grafoSoUmTipoAresta(a, 'Post Author')
