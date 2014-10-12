@@ -84,15 +84,15 @@ class MultiGraph(object):
         if node not in self._adjOut:
             self._adjOut[node] = set()
             self._adjIn[node] = set()
-            self.nodeAttrs[node] = {}
 
     def removeNode(self, node):
         if node in self._adjOut:
             del self._adjOut[node]
         if node in self._adjIn:
             del self._adjIn[node]
-        if node in self.nodeAttrs:
-            del self.nodeAttrs[node]
+        for attrDict in self.nodeAttrs.values():
+            if node in attrDict:
+                del attrDict[node]
 
     def removeNodeByAttr(self, attrName, attrValue):
         def filterNodes(node):
@@ -164,22 +164,28 @@ class MultiGraph(object):
         return self.edgeAttrSpecs.get(attrName)
 
     def getNodeAttrValueSet(self, attrName, default=None):
-        valueSet = set()
-        for attrDict in self.nodeAttrs.values():
-            valueSet.add(attrDict.get(attrName, default))
+        attrDict = self.nodeAttrs.get(attrName)
+        if attrDict != None:
+            valueSet = set(attrDict.values())
+        else:
+            valueSet = set()
+
+        if default != None:
+            valueSet.add(default)
 
         return valueSet
 
     def setNodeAttrFromDict(self, attrName, attrDict, default=None,
             attrType=None):
+        self.nodeAttrs[attrName] = {}
         for node in self.nodes():
             value = attrDict.get(node, default)
             if value is not None:
-                self.nodeAttrs[node][attrName] = value
+                self.nodeAttrs[attrName][node] = value
 
         if attrType != None:
             spec = AttrSpec(attrName, attrType)
-            spec.default = None
+            spec.default = default
             self.addNodeAttrSpec(spec)
 
     def setEdgeAttrFromDict(self, attrName, attrDict, default=None,
@@ -195,10 +201,8 @@ class MultiGraph(object):
             self.addEdgeAttrSpec(spec)
 
     def getNodeAttrNames(self):
-        names = set()
-        for attrDict in self.nodeAttrs.values():
-            for name in attrDict.keys():
-                names.add(name)
+        names = set(self.nodeAttrs.keys())
+
         return names
 
     def getEdgeAttrNames(self):
@@ -209,13 +213,14 @@ class MultiGraph(object):
         return names
 
     def setNodeAttr(self, node, attr, value):
-        self.nodeAttrs[node][attr] = value
+        attrDict = self.nodeAttrs.setdefault(attr, {})
+        attrDict[node] = value
 
     def getNodeAttr(self, node, attr, dflt=None):
         spec = self.nodeAttrSpecs.get(attr)
         if spec != None and spec.default != None:
             dflt = spec.default
-        return self.nodeAttrs[node].get(attr, dflt)
+        return self.nodeAttrs.get(attr, {}).get(node, dflt)
 
     def setEdgeAttr(self, edge, attr, value):
         self.edgeAttrs[edge][attr] = value
@@ -285,38 +290,28 @@ class MultiGraph(object):
 
         newGraph = MultiGraph()
 
-        nodeHits = {}
-        edgeHits = {}
-
         for node in self.nodes():
             newNode = nodeClass(node)
             newGraph.addNode(newNode)
-            count = nodeHits.get(newNode,0)
-            nodeHits[newNode] = count + 1
 
         for edge in self.edges():
             src, tgt, rel = edge
             newEdge = (nodeClass(src), nodeClass(tgt), edgeClass(edge))
             newGraph.addEdge(newEdge[0], newEdge[1], newEdge[2])
-            count = edgeHits.get(newEdge, 0)
-            edgeHits[newEdge] = count + 1
 
         if nodeClassAttr is not None:
             spec = self.getNodeAttrSpec(nodeClassAttr)
             if spec is not None:
                 newGraph.addNodeAttrSpec(spec)
             for node in newGraph.nodes():
-                newGraph.nodeAttrs[node][nodeClassAttr] = node
+                newGraph.setNodeAttr(node, nodeClassAttr, node)
 
         if edgeClassAttr is not None:
             spec = self.getEdgeAttrSpec(edgeClassAttr)
             if spec is not None:
                 newGraph.addEdgeAttrSpec(spec)
             for edge in newGraph.edges():
-                newGraph.edgeAttrs[edge][edgeClassAttr] = edge[2]
-
-        newGraph.setNodeAttrFromDict('hitCount', nodeHits, 0, 'int')
-        newGraph.setEdgeAttrFromDict('hitCount', edgeHits, 0, 'int')
+                newGraph.setEdgeAttr(edge, edgeClassAttr, edge[2])
 
         return newGraph
 
@@ -361,7 +356,7 @@ def writeDotFile(graph, filePath, classAttr='class'):
             f.write('  "{0}" [fillcolor="{1}"];\n'.format(
                 node,
                 nodeColor.get(
-                    graph.nodeAttrs[node].get(classAttr,0),
+                    graph.getNodeAttr(node, classAttr, 0),
                     '0.0,0.0,1.0')
                 )
             )
