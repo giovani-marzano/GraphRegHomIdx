@@ -176,6 +176,18 @@ class MultiGraph(object):
     def getNodeAttrSpec(self, attrName):
         return self.nodeAttrSpecs.get(attrName)
 
+    def removeNodeAttr(self, attrName):
+        if attrName in self.nodeAttrSpecs:
+            del self.nodeAttrSpecs[attrName]
+        if attrName in self.nodeAttrs:
+            del self.nodeAttrs[attrName]
+
+    def removeEdgeAttr(self, attrName):
+        if attrName in self.edgeAttrSpecs:
+            del self.edgeAttrSpecs[attrName]
+        if attrName in self.edgeAttrs:
+            del self.edgeAttrs[attrName]
+
     def addEdgeAttrSpec(self, attrSpec):
         self.edgeAttrSpecs[attrSpec.name] = attrSpec
 
@@ -184,12 +196,24 @@ class MultiGraph(object):
 
     def getNodeAttrValueSet(self, attrName, default=None):
         attrDict = self.nodeAttrs.get(attrName)
-        if attrDict != None:
+        if attrDict is not None:
             valueSet = set(attrDict.values())
         else:
             valueSet = set()
 
-        if default != None:
+        if default is not None:
+            valueSet.add(default)
+
+        return valueSet
+
+    def getEdgeAttrValueSet(self, attrName, default=None):
+        attrDict = self.edgeAttrs.get(attrName)
+        if attrDict is not None:
+            valueSet = set(attrDict.values())
+        else:
+            valueSet = set()
+
+        if default is not None:
             valueSet.add(default)
 
         return valueSet
@@ -202,7 +226,7 @@ class MultiGraph(object):
             if value is not None:
                 self.nodeAttrs[attrName][node] = value
 
-        if attrType != None:
+        if attrType is not None:
             spec = AttrSpec(attrName, attrType)
             spec.default = default
             self.addNodeAttrSpec(spec)
@@ -215,7 +239,7 @@ class MultiGraph(object):
             if value is not None:
                 self.edgeAttrs[attrName][edge] = value
 
-        if attrType != None:
+        if attrType is not None:
             spec = AttrSpec(attrName, attrType)
             spec.default = None
             self.addEdgeAttrSpec(spec)
@@ -232,7 +256,7 @@ class MultiGraph(object):
 
     def getNodeAttr(self, node, attr, dflt=None):
         spec = self.nodeAttrSpecs.get(attr)
-        if spec != None and spec.default != None:
+        if spec is not None and spec.default is not None:
             dflt = spec.default
         return self.nodeAttrs.get(attr, {}).get(node, dflt)
 
@@ -242,7 +266,7 @@ class MultiGraph(object):
 
     def getEdgeAttr(self, edge, attr, dflt=None):
         spec = self.edgeAttrSpecs.get(attr)
-        if spec != None and spec.default != None:
+        if spec is not None and spec.default is not None:
             dflt = spec.default
         return self.edgeAttrs.get(attr, {}).get(edge, dflt)
 
@@ -385,6 +409,7 @@ def writeDotFile(graph, filePath, classAttr='class'):
 
 class AttrSpec(object):
     VALID_TYPES = ('float','double','int','long','boolean','string')
+    NUMERIC_TYPES = ('float','double','int','long')
 
     def __init__(self, attr_name, attr_type, default=None):
         self.name = attr_name
@@ -406,6 +431,25 @@ class AttrSpec(object):
             dfltValue = self.strToType(dfltValue.strip())
         self.default = dfltValue
 
+    def getGraphmlType(self):
+        return self.type
+
+    def getArffType(self):
+        if self.type in AttrSpec.NUMERIC_TYPES:
+            return 'numeric'
+        elif self.type == 'string':
+            return 'string'
+        elif self.type == 'boolean':
+            return 'numeric'
+        else:
+            return None
+
+    def getArffValue(self, value):
+        if self.type == 'boolean':
+            return int(value)
+        else:
+            return value
+    
 def _computeAgregateFromSums(attr, specList, attrDicts, counts, sums, sumSqs):
     attrNameCount = attr+'_count'
     specList.append(AttrSpec(attrNameCount, 'int',0))
@@ -458,13 +502,13 @@ def agregateClassAttr(gOri, nodeClassAttr=None, edgeClassAttr=None, nodeAttrs=No
         nodeClassAttr;
     """
 
-    if nodeClassAttr != None:
+    if nodeClassAttr is not None:
         nodeClassFun = lambda n: gOri.getNodeAttr(n, nodeClassAttr)
     else:
         nodeClassFun = lambda n: n
         nodeClassAttr='node'
 
-    if edgeClassAttr != None:
+    if edgeClassAttr is not None:
         edgeRelFun = lambda e: gOri.getEdgeAttr(e, edgeClassAttr)
     else:
         edgeRelFun = lambda e: e[2]
@@ -491,7 +535,7 @@ def agregateClassAttr(gOri, nodeClassAttr=None, edgeClassAttr=None, nodeAttrs=No
         nodeClassCounts[nodeClass] += 1
         for attr in nodeAttrs:
             value = gOri.getNodeAttr(node, attr)
-            if value != None:
+            if value is not None:
                 nodeAttrCounts[attr][nodeClass] += 1
                 nodeAttrSums[attr][nodeClass] += value
                 nodeAttrSumSqs[attr][nodeClass] += value * value
@@ -506,7 +550,7 @@ def agregateClassAttr(gOri, nodeClassAttr=None, edgeClassAttr=None, nodeAttrs=No
         edgeTgtSet[edgeClass].add(tgt)
         for attr in edgeAttrs:
             value = gOri.getEdgeAttr((src, tgt, rel), attr)
-            if value != None:
+            if value is not None:
                 edgeAttrCounts[attr][edgeClass] += 1
                 edgeAttrSums[attr][edgeClass] += value
                 edgeAttrSumSqs[attr][edgeClass] += value * value
