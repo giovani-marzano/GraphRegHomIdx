@@ -32,20 +32,25 @@ def main():
 
     # Agregando as arestas diferentes entre dois nós e contando os tipos de
     # arestas.
-    novo, edgeIterationSpecs = relationShipParaAtributoDeAresta(
+    novo, edgeIterations = relationShipParaAtributoDeAresta(
             geral, tiposIteracoes, WEIGHT_ATTR)
 
-    nodeIterationSpecs = contandoIteracoesPorNodo(novo, tiposIteracoes)
+    nodeIterations = contandoIteracoesPorNodo(novo, tiposIteracoes)
 
-    criaArffParaNodos(novo, 'data/nodos.arff', nodeIterationSpecs)
-    criaArffParaArestas(novo, 'data/arestas.arff', edgeIterationSpecs)
+    criaArffParaNodos(novo, 'data/nodos.arff', nodeIterations)
+    criaArffParaArestas(novo, 'data/arestas.arff', edgeIterations)
 
     #novo.writeGraphml('data/processado.graphml')
 
-def criaArffParaNodos(g, fileName, attrSpecs):
+def criaArffParaNodos(g, fileName, attrs):
     """Cria um arquivo arff que lista os nodos o valor de cada atributo listado
     em attrSpecs.
     """
+
+    attrSpecs = []
+    for a in attrs:
+        if a in g.nodeAttrSpecs:
+            attrSpecs.append(g.nodeAttrSpecs[a])
 
     nodeType = None
     for node in g.nodes():
@@ -88,10 +93,15 @@ def criaArffParaNodos(g, fileName, attrSpecs):
                     f.write(u(',{}'.format(value)))
             f.write(u('\n'))
 
-def criaArffParaArestas(g, fileName, attrSpecs):
+def criaArffParaArestas(g, fileName, attrs):
     """Cria um arquivo arff que lista as arestas e o valor de cada atributo
-    listado em attrSpecs.
+    listado em attrs.
     """
+
+    attrSpecs = []
+    for a in attrs:
+        if a in g.edgeAttrSpecs:
+            attrSpecs.append(g.edgeAttrSpecs[a])
 
     nodeType = None
     relType = None
@@ -182,7 +192,7 @@ def relationShipParaAtributoDeAresta(g, tiposArestas, weightAttr):
     for tipo in tiposArestas:
         spec = gr.AttrSpec(tipo, 'int', 0)
         novo.addEdgeAttrSpec(spec)
-        atributos.append(spec)
+        atributos.append(tipo)
 
     # Percorremos as arestas do grafo original somando os pesos no novo grafo. A
     # relação (rel) no grafo original é igual ao atributo Relationship, pois
@@ -215,12 +225,14 @@ def contandoIteracoesPorNodo(g, tiposIteracoes):
     atributos = []
     
     for tipo in tiposIteracoes:
-        spec = gr.AttrSpec(tipo+'_in', 'int', 0)
+        attrName = tipo+'_in'
+        spec = gr.AttrSpec(attrName, 'int', 0)
         g.addNodeAttrSpec(spec)
-        atributos.append(spec)
-        spec = gr.AttrSpec(tipo+'_out', 'int', 0)
+        atributos.append(attrName)
+        attrName = tipo+'_out'
+        spec = gr.AttrSpec(attrName, 'int', 0)
         g.addNodeAttrSpec(spec)
-        atributos.append(spec)
+        atributos.append(attrName)
 
     for edge in g.edges():
         src, tgt, _ = edge
