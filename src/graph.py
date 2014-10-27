@@ -360,6 +360,42 @@ class MultiGraph(object):
     def writeGraphml(self, filePath):
         writeGraphml(self, filePath)
 
+    def extractNodeFeatureVectors(self, attrs):
+        """Cria um dicionário que maeia cada nodo a um vetor com os valores dos
+        atributos fornecidos.
+
+        :param attrs: Lista com os nomes dos atributos que devem compor o vetor
+            de cada nodo.
+        """
+        featureVectors = {}
+
+        for node in self.nodes():
+            vector = []
+            for attr in attrs:
+                vector.append(self.getNodeAttr(node, attr))
+
+            featureVectors[node] = vector
+
+        return featureVectors
+
+    def extractEdgeFeatureVectors(self, attrs):
+        """Cria um dicionário que maeia cada aresta a um vetor com os valores dos
+        atributos fornecidos.
+
+        :param attrs: Lista com os nomes dos atributos que devem compor o vetor
+            de cada aresta.
+        """
+        featureVectors = {}
+
+        for edge in self.edges():
+            vector = []
+            for attr in attrs:
+                vector.append(self.getEdgeAttr(edge, attr))
+
+            featureVectors[edge] = vector
+
+        return featureVectors
+
 def writeDotFile(graph, filePath, classAttr='class'):
     nodeColor = {}
     edgeColor = {}
@@ -476,7 +512,6 @@ def _computeAgregateFromSums(attr, specList, attrDicts, counts, sums, sumSqs):
             stdev = math.sqrt(sSq/n - pow(mean,2))
             attrDicts[attrNameMean][key] = mean
             attrDicts[attrNameStdev][key] = stdev
-
 
 def agregateClassAttr(gOri, nodeClassAttr=None, edgeClassAttr=None, nodeAttrs=None, edgeAttrs=None):
     """Cria dados agregados de atributos agrupados pelos valores dos atributos

@@ -156,7 +156,7 @@ class AbstractSOMap(object):
 
         :param elem: Elemento a ser testado
 
-        :return: (nodo, distancia)
+        :return: (nodo, distancia ao quadrado do nodo)
         """
         bestNode = self.nodes[0]
         bestDist = bestNode.distSq(elem)
@@ -168,6 +168,24 @@ class AbstractSOMap(object):
                 bestNode = node
 
         return (bestNode, bestDist)
+
+    def classifyMapOfElements(self, mapElem):
+        """Classifica os elementos armazenados no mapa fornecido, retornando 2
+        mapas: Um que associa cada chave do mapa original ao id do nodo mais
+        próximo a seu elemento. E outro que associa cada chave do mapa original
+        ao erro de quantização de seu elemento. O erro de quantização é a
+        distância do elemento ao nodo do SOM a que foi atribuído.
+        """
+
+        mapNodos = {}
+        mapError = {}
+
+        for key, elem in mapElem.items():
+            nodo, distSq = self.findNodeForElem(elem)
+            mapNodos[key] = nodo.getID()
+            mapError[key] = math.sqrt(distSq)
+
+        return mapNodos, mapError
 
     def _assignOneElement(self, elem):
         """Atribui um elemento a seu nodo mais próximo.
