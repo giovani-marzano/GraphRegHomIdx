@@ -82,6 +82,8 @@ class MultiGraph(object):
         self.relations = set()
         self.nodeAttrSpecs = {}
         self.edgeAttrSpecs = {}
+        self.graphAttrSpecs = {}
+        self.graphAttrs = {}
 
     def addNode(self, node):
         if node not in self._adjOut:
@@ -108,8 +110,6 @@ class MultiGraph(object):
             self.removeNode(node)
 
     def addEdge(self, source, target, relation):
-        edgeTuple = (source, target, relation)
-
         if self.hasEdge(source, target, relation):
             # Aresta já existe
             return
@@ -161,6 +161,13 @@ class MultiGraph(object):
     def inNeighboors(self, node):
         return iter(self._adjIn[node])
 
+    def neighboors(self, node):
+        """Retorna um iterador para todos os vizinhos de um nodo, tanto os de
+        entrada como os de saída. É equivalente a considerar que as arestas não
+        possuem direção.
+        """
+        return chain(self.outNeighboors(node), self.inNeighboors(node))
+
     def hasNode(self, node):
         return node in self._adjOut
 
@@ -169,6 +176,18 @@ class MultiGraph(object):
             return (tgt, rel) in self._adjOut[src]
         else:
             return False
+
+    def addGraphAttrSpec(self, attrSpec):
+        self.graphAttrSpecs[attrSpec.name] = attrSpec
+
+    def getGraphAttrSpec(self, attrName):
+        return self.graphAttrSpecs.get(attrName)
+
+    def removeGraphAttr(self, attrName):
+        if attrName in self.graphAttrSpecs:
+            del self.graphAttrSpecs[attrName]
+        if attrName in self.graphAttrs:
+            del self.graphAttrs[attrName]
 
     def addNodeAttrSpec(self, attrSpec):
         self.nodeAttrSpecs[attrSpec.name] = attrSpec
@@ -182,17 +201,17 @@ class MultiGraph(object):
         if attrName in self.nodeAttrs:
             del self.nodeAttrs[attrName]
 
-    def removeEdgeAttr(self, attrName):
-        if attrName in self.edgeAttrSpecs:
-            del self.edgeAttrSpecs[attrName]
-        if attrName in self.edgeAttrs:
-            del self.edgeAttrs[attrName]
-
     def addEdgeAttrSpec(self, attrSpec):
         self.edgeAttrSpecs[attrSpec.name] = attrSpec
 
     def getEdgeAttrSpec(self, attrName):
         return self.edgeAttrSpecs.get(attrName)
+
+    def removeEdgeAttr(self, attrName):
+        if attrName in self.edgeAttrSpecs:
+            del self.edgeAttrSpecs[attrName]
+        if attrName in self.edgeAttrs:
+            del self.edgeAttrs[attrName]
 
     def getNodeAttrValueSet(self, attrName, default=None):
         attrDict = self.nodeAttrs.get(attrName)
@@ -249,6 +268,15 @@ class MultiGraph(object):
 
     def getEdgeAttrNames(self):
         return set(self.edgeAttrs.keys())
+
+    def setGraphAttr(self, attr, value):
+        self.graphAttrs[attr] = value
+
+    def getGraphAttr(self, attr, dflt=None):
+        spec = self.graphAttrSpecs.get(attr)
+        if spec is not None and spec.default is not None:
+            dflt = spec.default
+        return self.graphAttrs.get(attr, dflt)
 
     def setNodeAttr(self, node, attr, value):
         attrDict = self.nodeAttrs.setdefault(attr, {})
@@ -652,7 +680,7 @@ def weaklyConnectedComponents(g):
         while len(stack) > 0:
             n1 = stack.pop()
 
-            for n2, r in chain(g.outNeighboors(n1), g.inNeighboors(n1)):
+            for n2, r in g.neighboors(n1):
                 if n2 in components:
                     continue
                 components[n2] = compNum
@@ -660,6 +688,26 @@ def weaklyConnectedComponents(g):
 
     return components
             
+def _createXmlKeyForAttrs(root, attrNames, attrSpecs, attrIds, forElem):
+    for attr in attrNames:
+        attrSpec = attrSpecs[attr]
+        key  = ET.SubElement(root, 'key')
+        key.set('id', attrIds[attrSpec.name])
+        key.set('for', forElem)
+        key.set('attr.name', attrSpec.name)
+        key.set('attr.type', attrSpec.type)
+        if attrSpec.default is not None:
+            default = ET.SubElement(key, 'default')
+            default.text = str(attrSpec.default)
+
+def _createXmlDataForAttrs(root, attrNames, attrSpecs, attrIds, getAttrFun):
+    for attr in attrNames:
+        spec = attrSpecs[attr]
+        value = getAttrFun(spec.name, spec.default)
+        if value != spec.default:
+            data = ET.SubElement(root, 'data')
+            data.set('key', attrIds[spec.name])
+            data.text = '{}'.format(value)
 
 def writeGraphml(mGraph, filePath, encoding="UTF-8"):
     root = ET.Element('graphml')
@@ -671,14 +719,22 @@ def writeGraphml(mGraph, filePath, encoding="UTF-8"):
             "http://graphml.graphdrawing.org/xmlns"+
             " http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd")
 
+    graphAttrs = sorted(mGraph.graphAttrSpecs.keys())
+    graphAttrIDs = {}
+    nodeAttrs = sorted(mGraph.nodeAttrSpecs.keys())
     nodeAttrIDs = {}
+    edgeAttrs = sorted(mGraph.edgeAttrSpecs.keys())
     edgeAttrIDs = {}
     dataCount = 0
-    for attrName in mGraph.nodeAttrSpecs.keys():
+    for attrName in graphAttrs:
+        graphAttrIDs[attrName] = 'd{}'.format(dataCount)
+        dataCount += 1
+
+    for attrName in nodeAttrs:
         nodeAttrIDs[attrName] = 'd{}'.format(dataCount)
         dataCount += 1
 
-    for attrName in mGraph.edgeAttrSpecs.keys():
+    for attrName in edgeAttrs:
         edgeAttrIDs[attrName] = 'd{}'.format(dataCount)
         dataCount += 1
 
@@ -696,48 +752,31 @@ def writeGraphml(mGraph, filePath, encoding="UTF-8"):
     if len(ext) == 0:
         filePath += '.graphml'
 
-    for attrSpec in mGraph.nodeAttrSpecs.values():
-        key  = ET.SubElement(root, 'key')
-        key.set('id', nodeAttrIDs[attrSpec.name])
-        key.set('for', 'node')
-        key.set('attr.name', attrSpec.name)
-        key.set('attr.type', attrSpec.type)
-        if attrSpec.default is not None:
-            default = ET.SubElement(key, 'default')
-            default.text = str(attrSpec.default)
-
-    for attrSpec in mGraph.edgeAttrSpecs.values():
-        key  = ET.SubElement(root, 'key')
-        key.set('id', edgeAttrIDs[attrSpec.name])
-        key.set('for', 'edge')
-        key.set('attr.name', attrSpec.name)
-        key.set('attr.type', attrSpec.type)
-        if attrSpec.default is not None:
-            default = ET.SubElement(key, 'default')
-            default.text = str(attrSpec.default)
+    _createXmlKeyForAttrs(root, graphAttrs, mGraph.graphAttrSpecs, graphAttrIDs,
+            'graph')
+    _createXmlKeyForAttrs(root, nodeAttrs, mGraph.nodeAttrSpecs, nodeAttrIDs,
+            'node')
+    _createXmlKeyForAttrs(root, edgeAttrs, mGraph.edgeAttrSpecs, edgeAttrIDs,
+            'edge')
 
     graph = ET.SubElement(root, 'graph')
     graph.set('id',graphName)
     graph.set('edgedefault','directed')
+    _createXmlDataForAttrs(graph, graphAttrs, mGraph.graphAttrSpecs,
+            graphAttrIDs, mGraph.getGraphAttr)
+
     for vert in mGraph.nodes():
         node = ET.SubElement(graph, 'node')
         node.set('id', nodeIDs[vert])
-        for spec in mGraph.nodeAttrSpecs.values():
-            value = mGraph.getNodeAttr(vert, spec.name, spec.default)
-            if value != spec.default:
-                data = ET.SubElement(node, 'data')
-                data.set('key', nodeAttrIDs[spec.name])
-                data.text = '{}'.format(value)
+        _createXmlDataForAttrs(node, nodeAttrs, mGraph.nodeAttrSpecs,
+                nodeAttrIDs, lambda a, d: mGraph.getNodeAttr(vert, a, d))
     for v1, v2, rel in mGraph.edges():
         edge = ET.SubElement(graph, 'edge')
         edge.set('source', nodeIDs[v1])
         edge.set('target', nodeIDs[v2])
-        for spec in mGraph.edgeAttrSpecs.values():
-            value = mGraph.getEdgeAttr((v1,v2,rel), spec.name, spec.default)
-            if value != spec.default:
-                data = ET.SubElement(edge, 'data')
-                data.set('key', edgeAttrIDs[spec.name])
-                data.text = '{}'.format(value)
+        _createXmlDataForAttrs(edge, edgeAttrs, mGraph.edgeAttrSpecs,
+                edgeAttrIDs, lambda a, d: mGraph.getEdgeAttr((v1,v2,rel), a, d))
+
     tree = ET.ElementTree(root)
     tree.write(filePath, encoding=encoding, xml_declaration=True, method="xml")
 
@@ -746,6 +785,7 @@ def loadGraphml(fileName, relationAttr=EDGE_RELATION_ATTR):
 
     namespaces = {'g':"http://graphml.graphdrawing.org/xmlns"}
 
+    graphAttrs = {}
     edgeAttrs = {}
     nodeAttrs = {}
     relationKey = None
@@ -760,6 +800,8 @@ def loadGraphml(fileName, relationAttr=EDGE_RELATION_ATTR):
                     relationKey = xkey.get('id')
             elif xkey.get('for') == 'node':
                 nodeAttrs[xkey.get('id')] = attrSpec
+            elif xkey.get('for') == 'graph':
+                graphAttrs[xkey.get('id')] = attrSpec
 
             xdefault = xkey.find('g:default', namespaces)
             if xdefault is not None:
@@ -767,6 +809,14 @@ def loadGraphml(fileName, relationAttr=EDGE_RELATION_ATTR):
 
     xgraph = xtree.find('g:graph', namespaces)
     graph = MultiGraph()
+
+    for xdata in xgraph.iterfind('g:data', namespaces):
+        key = xdata.get('key')
+        if key in graphAttrs:
+            attrSpec = graphAttrs[key]
+            value = attrSpec.strToType(xdata.text)
+            if value != attrSpec.default:
+                graph.setGraphAttr(attrSpec.name, value)
 
     for xnode in xgraph.iterfind('g:node', namespaces):
         nid = xnode.get('id')

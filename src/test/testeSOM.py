@@ -303,7 +303,6 @@ def testVetSeeds(listAttr, maxNodes, FVU, wTrain, wRef, maxSteps):
     m.conf.maxNodes = maxNodes
     m.conf.neighWeightTrain = wTrain
     m.conf.neighWeightRefine = wRef
-    m.conf.neighWeightRefine = wRef
     m.conf.maxStepsPerGeneration = maxSteps
 
     print("\n==== " + str(datetime.now()) + " ====")
@@ -317,7 +316,7 @@ def testVetSeeds(listAttr, maxNodes, FVU, wTrain, wRef, maxSteps):
 
     return m
 
-def testVetSeedsGrid(listAttr, nrows, ncols, refineWeight, maxSteps):
+def testVetSeedsGrid(listAttr, nrows, ncols, trainWeight, refineWeight, maxSteps):
 
     elements = readDatafile('seedsNorm.txt', listAttr)
 
@@ -326,6 +325,7 @@ def testVetSeedsGrid(listAttr, nrows, ncols, refineWeight, maxSteps):
 
     outer[1] = m
 
+    m.conf.neighWeightTrain = trainWeight
     m.conf.neighWeightRefine = refineWeight
     m.conf.maxStepsPerGeneration = maxSteps
 
@@ -336,6 +336,9 @@ def testVetSeedsGrid(listAttr, nrows, ncols, refineWeight, maxSteps):
     writeSOMVetElements(m, 'seedsVetGridRes.txt')
     writeSOMNodes(m, 'seedsVetGridNodes.txt')
     writeSOMGraphml(m, 'seedsVetGridTree')
+
+    g = somVet.convertSOMapToMultiGraph(m)
+    g.writeGraphml(os.path.join('data','gseedsGrid'))
 
     return m
 
@@ -403,9 +406,9 @@ def testCirculosVet(maxNodes, FVU, wTrain, wRef):
 #createYCirculos(1200)
 #testCirculosVet(100, 0.05, 0.5, 0.5)
 #testCirculosVet(10, 0.2, 0.5, 0.0)
-#normalizeSeeds()
+normalizeSeeds()
 #testSeeds([0,1,2,3,4,5,6], 10, 0.2, 0.5, 0.1, 20)
 #m = testVetSeeds([0,1,2,3,4,5,6], 10, 0.2, 0.5, 0.1, 20)
-m = testVetSeedsGrid([0,1,2,3,4,5,6], 5, 9, 0.5, 20)
+m = testVetSeedsGrid([0,1,2,3,4,5,6], 5, 9, 0.5, 0, 20)
 #testSeeds([0,1,2,3,4,5,6], 100, 0.02, 0.5, 0.5, 20)
 #testVetSeeds([0,1,2,3,4,5,6], 100, 0.02, 0.5, 0.5, 20)

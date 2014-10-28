@@ -1,10 +1,13 @@
 #!/usr/bin/python3
 # coding: utf-8
 
+from __future__ import print_function
+
 import graph as gr
 import collections
 import io
 import sys
+import SOM.vectorBased as somV
 
 if sys.version < '3':
     import codecs

@@ -4,9 +4,15 @@ ao SOM são pontos em um espaço n dimensional. A distância entre os elementos 
 distância euclidiana entre os pontos.
 """
 
+from __future__ import print_function
+
 __author__ = "Giovani Melo Marzano"
 
 from . import Config, AbstractSOMap, AbstractSOMNode
+import graph as gr
+import math
+
+from future_builtins import zip
 
 def euclidDistSq(a, b):
     """Distancia euclidiana ao quadrado de dois vetores.
@@ -118,6 +124,12 @@ class SOMNode(AbstractSOMNode):
     def _getClosestElem(self):
         return self._closestElem
 
+    def getStdevVect(self):
+        if self._numElem <= 1:
+            return [0 for x in self.refElem]
+
+        return [ math.sqrt((s2 - (s*s)/self._numElem)/self._numElem)
+                    for s, s2 in zip(self._sumVect, self._sumSqVect)]
 
 class SOMap(AbstractSOMap):
     """Um mapa auto organizável que opera sobre vetores numéricos.
@@ -202,9 +214,9 @@ class SOMap(AbstractSOMap):
         self._initializeHexGrid(nrows, ncols)
         neighDepth = max(nrows/2, ncols/2)
         neighDepthMin = self.conf.calcMaxDepthForWeight(
-                self.conf.neighWeightRefine)
+                self.conf.neighWeightTrain)
 
-        while neighDepth > neighDepthMin:
+        while neighDepth >= neighDepthMin:
             self.conf.applyMaxDepthWeight(neighDepth)
             self.train()
             self._printGridSumary("Train",neighDepth,neighDepthMin)
@@ -213,4 +225,72 @@ class SOMap(AbstractSOMap):
         self.conf.applyRefineWeight()
         self.train()
         self._printGridSumary("Refine",neighDepth, neighDepthMin)
+
+def convertSOMapToMultiGraph(som):
+    """Cria um MultiGraph a partir de um SOM baseado em vetores.
+
+    OBS: O SOM é um grafo não direcionado, mas a classe MultiGraph considera que
+    as arestas são direcionadas. A convensão que utilizaremos aqui será a de
+    criar a aresta apenas no sentido do nodo de menor ID para o de maior ID. Um
+    MultiGraph possui o método 'neighboors' que permite iterar por todos os
+    vizinhos de um nodo independente do sentido das arestas. Utilizando-se este
+    método pode-se recuperar a vizinhança não direcionada do SOM original.
+
+    :param som: SOM a ser convertido em grafo
+
+    :return: Instancia de MultiGraph
+    """
+
+    g = gr.MultiGraph()
+
+    # Criando atributos de grafo
+    dimensionSpec = gr.AttrSpec('inSpaceDim', 'int', 0)
+    g.addGraphAttrSpec(dimensionSpec)
+
+    dimension = len(som.nodes[0].refElem)
+    g.setGraphAttr(dimensionSpec.name, dimension)
+
+    # Criando atributos de nodos
+    numElemSpec = gr.AttrSpec('numElem', 'int', 0)
+    g.addNodeAttrSpec(numElemSpec)
+
+    meanSpecs = []
+    stdevSpecs = []
+    refSpecs = []
+    for i in range(dimension):
+        spec = gr.AttrSpec('mean[{}]'.format(i), 'double', 0)
+        meanSpecs.append(spec)
+        g.addNodeAttrSpec(spec)
+        spec = gr.AttrSpec('stdev[{}]'.format(i), 'double', 0)
+        stdevSpecs.append(spec)
+        g.addNodeAttrSpec(spec)
+        spec = gr.AttrSpec('ref[{}]'.format(i), 'double', 0)
+        refSpecs.append(spec)
+        g.addNodeAttrSpec(spec)
+
+    # Criando atributos de aresta
+    distSpec = gr.AttrSpec('dist', 'double', 0)
+    g.addEdgeAttrSpec(distSpec)
+
+    for node in som.nodes:
+        n = node.getID()
+        g.addNode(n)
+        g.setNodeAttr(n, numElemSpec.name, node.getNumElements())
+        mean = node.getMeanElement()
+        stdev = node.getStdevVect()
+        for i in range(dimension):
+            g.setNodeAttr(n, refSpecs[i].name, node.refElem[i])
+            g.setNodeAttr(n, meanSpecs[i].name, mean[i])
+            g.setNodeAttr(n, stdevSpecs[i].name, stdev[i])
+
+    for n1 in som.nodes:
+        n1id = n1.getID()
+        for n2 in n1.neighbors:
+            n2id = n2.getID()
+            if n1id < n2id:
+                g.addEdge(n1id, n2id, 1)
+                g.setEdgeAttr((n1id, n2id, 1), distSpec.name,
+                    n1.dist(n2.refElem))
+
+    return g
 
