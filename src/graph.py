@@ -575,7 +575,7 @@ def agregateClassAttr(gOri, nodeClassAttr=None, edgeClassAttr=None, nodeAttrs=No
         edgeRelFun = lambda e: gOri.getEdgeAttr(e, edgeClassAttr)
     else:
         edgeRelFun = lambda e: e[2]
-        edgeRelFun = 'edge'
+        edgeClassAttr = 'edge'
 
     if nodeAttrs == None:
         nodeAttrs = []
