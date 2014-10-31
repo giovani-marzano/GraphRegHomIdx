@@ -8,7 +8,7 @@ from itertools import chain
 
 EDGE_RELATION_ATTR='_relation'
 
-def regularEquivalence(graph):
+def regularEquivalence(graph, preClassAttr=None):
     """Cria um mapeamento dos nodos do grafo a uma classe de equivalência
     regular.
 
@@ -16,24 +16,34 @@ def regularEquivalence(graph):
     :return: mapa de nodos a um inteiro que representa a classe de
         equivalência a que pertence.
     """
-    # Todos os vértices começam na classe de equivalência 0.
-    # Iremos processar os vértices em sequência numérica e atribuiremos as
+
+    # Lista de tuplas (n, node) onde n é um numero único associado ao nodo.
+    # Iremos processar os nodos em sequência numérica e atribuiremos as
     # clases de tal forma que o número de uma classe seja igual ao número do
-    # vértice de menor número pertencente àquela classe.
-    nodeNumber = {}
-    for n, node in enumerate(graph.nodes()):
-        nodeNumber[node] = n
-    classesAnt = {node:0 for node in graph.nodes()}
+    # nodo de menor número pertencente àquela classe.
+    nodes = list(enumerate(graph.nodes()))
+
+    if preClassAttr is None:
+        # Todos os nodos começam na classe de equivalência 0.
+        classesAnt = {node:0 for node in graph.nodes()}
+    else:
+        attrClassNum = {}
+        classesAnt = {}
+        for num, node in nodes:
+            attr = graph.getNodeAttr(node, preClassAttr)
+            nodeClass = attrClassNum.setdefault(attr, num)
+            classesAnt[node] = nodeClass
+
     classesNow = {node:None for node in graph.nodes()}
     changed = True
 
     while changed:
         changed = False
-        for n1 in graph.nodes():
+        for nodeNumber, n1 in nodes:
             if classesNow[n1] is not None:
                 continue
 
-            classesNow[n1] = nodeNumber[n1]
+            classesNow[n1] = nodeNumber
             if classesNow[n1] != classesAnt[n1]:
                 changed = True
 
@@ -42,13 +52,13 @@ def regularEquivalence(graph):
             classesInN1 = {(classesAnt[v], r) for v, r in graph.inNeighboors(n1) }
             classesOutN1 = {(classesAnt[v], r) for v, r in graph.outNeighboors(n1)}
 
-            for n2 in graph.nodes():
+            for _, n2 in nodes:
                 if classesAnt[n2] != classesAnt[n1]:
                     # Se dois vertices nao estavam na mesma classe é porque já
                     # foram considerados incompatíveis.
                     continue
                 if classesNow[n2] is not None:
-                    # O vértice n2 já foi atribuido a uma classe, portanto não
+                    # O nodo n2 já foi atribuido a uma classe, portanto não
                     # precisa ser processado
                     continue
 
@@ -298,7 +308,8 @@ class MultiGraph(object):
             dflt = spec.default
         return self.edgeAttrs.get(attr, {}).get(edge, dflt)
 
-    def classifyNodesRegularEquivalence(self, classAttr='class'):
+    def classifyNodesRegularEquivalence(self, classAttr='class',
+            preClassAttr=None):
         """Cria um atributo de nodos que os particiona em classes de
         equivalência de uma equivalência regular.
 
@@ -306,7 +317,7 @@ class MultiGraph(object):
         equivalência a que o nodo foi atribuído.
         """
 
-        classes = regularEquivalence(self)
+        classes = regularEquivalence(self, preClassAttr)
         spec = AttrSpec(classAttr,'int')
         self.addNodeAttrSpec(spec)
         self.setNodeAttrFromDict(classAttr, classes)
