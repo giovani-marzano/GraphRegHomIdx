@@ -8,7 +8,7 @@ from itertools import chain
 
 EDGE_RELATION_ATTR='_relation'
 
-def regularEquivalence(graph, preClassAttr=None):
+def regularEquivalence(graph, preClassAttr=None, edgeClassAttr=None):
     """Cria um mapeamento dos nodos do grafo a uma classe de equivalência
     regular.
 
@@ -17,15 +17,22 @@ def regularEquivalence(graph, preClassAttr=None):
         equivalência a que pertence.
     """
 
+    if edgeClassAttr is None:
+        def edgeRel(src,tgt,rel):
+            return rel
+    else:
+        def edgeRel(src,tgt,rel):
+            return graph.getEdgeAttr((src, tgt, rel), edgeClassAttr)
+
     # Lista de tuplas (n, node) onde n é um numero único associado ao nodo.
     # Iremos processar os nodos em sequência numérica e atribuiremos as
     # clases de tal forma que o número de uma classe seja igual ao número do
     # nodo de menor número pertencente àquela classe.
-    nodes = list(enumerate(graph.nodes()))
+    nodes = [(n+1, node) for n, node in enumerate(graph.nodes())]
 
     if preClassAttr is None:
-        # Todos os nodos começam na classe de equivalência 0.
-        classesAnt = {node:0 for node in graph.nodes()}
+        # Todos os nodos começam na classe de equivalência do primeiro nodo.
+        classesAnt = {node:nodes[0][0] for _, node in nodes}
     else:
         attrClassNum = {}
         classesAnt = {}
@@ -34,7 +41,7 @@ def regularEquivalence(graph, preClassAttr=None):
             nodeClass = attrClassNum.setdefault(attr, num)
             classesAnt[node] = nodeClass
 
-    classesNow = {node:None for node in graph.nodes()}
+    classesNow = {node:None for _, node in nodes}
     changed = True
 
     while changed:
@@ -49,8 +56,8 @@ def regularEquivalence(graph, preClassAttr=None):
 
             # Conjuntos das classes de equivalencia que possuem arestas
             # entrando e saindo de n1
-            classesInN1 = {(classesAnt[v], r) for v, r in graph.inNeighboors(n1) }
-            classesOutN1 = {(classesAnt[v], r) for v, r in graph.outNeighboors(n1)}
+            classesInN1 = {(classesAnt[v], edgeRel(v,n1,r)) for v, r in graph.inNeighboors(n1)}
+            classesOutN1 = {(classesAnt[v], edgeRel(n1,v,r)) for v, r in graph.outNeighboors(n1)}
 
             for _, n2 in nodes:
                 if classesAnt[n2] != classesAnt[n1]:
@@ -64,8 +71,8 @@ def regularEquivalence(graph, preClassAttr=None):
 
                 # Conjuntos das classes de equivalencia que possuem arestas
                 # entrando e saindo de n2
-                classesInN2 = {(classesAnt[v], r) for v, r in graph.inNeighboors(n2)}
-                classesOutN2 = {(classesAnt[v], r) for v, r in graph.outNeighboors(n2)}
+                classesInN2 = {(classesAnt[v], edgeRel(v,n2,r)) for v, r in graph.inNeighboors(n2)}
+                classesOutN2 = {(classesAnt[v], edgeRel(n2,v,r)) for v, r in graph.outNeighboors(n2)}
 
                 if classesInN1 == classesInN2 and classesOutN1 == classesOutN2:
                     classesNow[n2] = classesNow[n1]
@@ -102,11 +109,23 @@ class MultiGraph(object):
             self._numNodes += 1
 
     def removeNode(self, node):
+        if not self.hasNode(node):
+            return
+
+        edgesToRemove = []
+        for v, r in self.outNeighboors(node):
+            edgesToRemove.append((node, v, r))
+        for v, r in self.inNeighboors(node):
+            edgesToRemove.append((v, node, r))
+        for s,t,r in edgesToRemove:
+            self.removeEdge(s,t,r)
+
         if node in self._adjOut:
             del self._adjOut[node]
             self._numNodes -= 1
         if node in self._adjIn:
             del self._adjIn[node]
+
         for attrDict in self.nodeAttrs.values():
             if node in attrDict:
                 del attrDict[node]
@@ -139,9 +158,9 @@ class MultiGraph(object):
             self._adjIn[target].discard((source, relation))
             self._numEdges -= 1
             edge = (source, target, relation)
-        for attrDict in self.edgeAttrs.values():
-            if edge in attrDict:
-                del attrDict[edge]
+            for attrDict in self.edgeAttrs.values():
+                if edge in attrDict:
+                    del attrDict[edge]
 
     def removeEdgeByAttr(self, attrName, attrValue):
         def filterEdges(edge):
@@ -309,7 +328,7 @@ class MultiGraph(object):
         return self.edgeAttrs.get(attr, {}).get(edge, dflt)
 
     def classifyNodesRegularEquivalence(self, classAttr='class',
-            preClassAttr=None):
+            preClassAttr=None, edgeClassAttr=None):
         """Cria um atributo de nodos que os particiona em classes de
         equivalência de uma equivalência regular.
 
@@ -317,7 +336,7 @@ class MultiGraph(object):
         equivalência a que o nodo foi atribuído.
         """
 
-        classes = regularEquivalence(self, preClassAttr)
+        classes = regularEquivalence(self, preClassAttr, edgeClassAttr)
         spec = AttrSpec(classAttr,'int')
         self.addNodeAttrSpec(spec)
         self.setNodeAttrFromDict(classAttr, classes)
@@ -540,9 +559,9 @@ def _computeAgregateFromSums(attr, specList, attrDicts, counts, sums, sumSqs):
         # Number of elements
         n = counts[attr][key]
         # Sum of elements
-        s = sums[attr][key]
+        s = sums[attr][key] * 1.0
         # Sum of squares of elements
-        sSq = sumSqs[attr][key]
+        sSq = sumSqs[attr][key] * 1.0
 
         attrDicts[attrNameCount][key] = n
 

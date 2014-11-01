@@ -8,8 +8,11 @@ import collections
 import io
 import sys
 import SOM.vectorBased as somV
+import logging
+import logging.config
+import os.path
 
-if sys.version < '3':
+if sys.version_info.major < 3:
     import codecs
     def u(x):
         return codecs.unicode_escape_decode(x)[0]
@@ -17,33 +20,129 @@ else:
     def u(x):
         return x
 
-RELATION_ATTR='Relationship'
-WEIGHT_ATTR='Edge Weight'
-NODE_ID_ATTR='n-id'
-NODE_NAME_ATTR='n-name'
+RELATION_ATTR = 'Relationship'
+WEIGHT_ATTR = 'Edge Weight'
+NODE_ID_ATTR = 'n-id'
+NODE_NAME_ATTR = 'n-name'
+DIR_OUTPUT = 'data'
+ARQ_IN = os.path.join(DIR_OUTPUT,'face.graphml')
+ARFF_NODOS = os.path.join(DIR_OUTPUT, 'nodos.arff')
+ARFF_EDGES = os.path.join(DIR_OUTPUT, 'edges.arff')
+ARQ_AGREGADO = os.path.join(DIR_OUTPUT,'agregado.graphml')
+ARQ_PROCESSADO = os.path.join(DIR_OUTPUT,'processado.graphml')
+ARQ_LOG = os.path.join(DIR_OUTPUT,'log.txt')
 
-def main():
+def main(log):
     """Função principal do script, executada no final do arquivo.
     """
-    geral = gr.loadGraphml('data/face.graphml', relationAttr=RELATION_ATTR)
+    log.info('Carregando grafo {}...'.format(ARQ_IN))
+    geral = gr.loadGraphml(ARQ_IN, relationAttr=RELATION_ATTR)
+    log.info('... carregado: {} nodos e {} arestas'.format(geral.getNumNodes(),
+                geral.getNumEdges()))
 
-    #limpezaDeAtributos(geral, [], [WEIGHT_ATTR, RELATION_ATTR])
-    #imprimeAtributos(geral)
+    log.info('Ocorrencias de arestas paralelas: {}'.format(
+        contandoArestasComMesmaOrigemEDestino(geral)))
+
+    preprocessaGrafo(geral, log)
 
     # Pegando o conjunto de todos os tipos de arestas do grafo
-    tiposIteracoes = geral.getEdgeAttrValueSet(RELATION_ATTR);
+    tiposInteracoes = geral.getEdgeAttrValueSet(RELATION_ATTR);
+    log.info('Tipos de relacionamentos no grafo: '+str(list(tiposInteracoes)))
 
+    processamentoTiposArestasAgregados(geral, log, tiposInteracoes)
+
+    for tipo in tiposInteracoes:
+        grafoEquivRegularSoUmTipoAresta(geral, tipo, log)
+
+    log.info('Salvando {}...'.format(ARQ_PROCESSADO))
+    geral.writeGraphml(ARQ_PROCESSADO)
+    log.info('...ok')
+
+def preprocessaGrafo(geral, log):
+    limpezaDeAtributos(geral, [], [WEIGHT_ATTR, RELATION_ATTR], log)
+    imprimeAtributos(geral, log)
+
+    # No grafo que está sendo carregado o atributo WEIGHT_ATTR está como tipo
+    # string e deveria ser inteiro. Aqui convertemos os valores de WEIGHT_ATTR
+    # para inteiro
+    weights = geral.extractEdgeFeatureVectors([WEIGHT_ATTR])
+    geral.removeEdgeAttr(WEIGHT_ATTR)
+    spec = gr.AttrSpec(WEIGHT_ATTR, 'int', 0)
+    geral.addEdgeAttrSpec(spec)
+    for edge, vet in weights.items():
+        geral.setEdgeAttr(edge, WEIGHT_ATTR, int(vet[0]))
+
+def processamentoTiposArestasAgregados(geral, log, tiposInteracoes):
     # Agregando as arestas diferentes entre dois nós e contando os tipos de
     # arestas.
+    log.info('Agregando arestas...')
     novo, edgeIterations = relationShipParaAtributoDeAresta(
-            geral, tiposIteracoes, WEIGHT_ATTR)
+            geral, tiposInteracoes, WEIGHT_ATTR)
+    log.info('...atributos criados:'+str(list(edgeIterations)))
 
-    nodeIterations = contandoIteracoesPorNodo(novo, tiposIteracoes)
+    log.info('Agregando por nodo...')
+    nodeIterations = contandoInteracoesPorNodo(novo, tiposInteracoes)
+    log.info('...atributos criados:'+str(list(nodeIterations)))
 
-    criaArffParaNodos(novo, 'data/nodos.arff', nodeIterations)
-    criaArffParaArestas(novo, 'data/arestas.arff', edgeIterations)
+    criaArffParaNodos(novo, ARFF_NODOS, nodeIterations)
+    log.info('Arquivo {} criado'.format(ARFF_NODOS))
+    criaArffParaArestas(novo, ARFF_EDGES, edgeIterations)
+    log.info('Arquivo {} criado'.format(ARFF_EDGES))
 
-    #novo.writeGraphml('data/processado.graphml')
+    log.info('Salvando grafo agregado em {}'.format(ARQ_AGREGADO))
+    novo.writeGraphml(ARQ_AGREGADO)
+
+
+def grafoEquivRegularSoUmTipoAresta(a, tipo, log):
+    """Extrai do grafo original o subgrafo que possui apenas um dos tipos de
+    aresta e produz o menor grafo de classes de equivalencia regular deste
+    subgrafo. Anota o grafo original com estatísticas agregadas dos pesos de
+    arestas.
+    """
+    b = a.spawnFromClassAttributes(edgeClassAttr=RELATION_ATTR)
+
+    tipo, b.getNumNodes(), b.getNumEdges()
+    for edge in b.edges():
+        if b.getEdgeAttr(edge, RELATION_ATTR) == tipo:
+            b.setEdgeAttr(edge, 'filtro', 1)
+        else:
+            b.setEdgeAttr(edge, 'filtro', 0)
+
+    b.removeEdgeByAttr('filtro', 0)
+    log.info('Numero de arestas do tipo {}: {}'.format(tipo, b.getNumEdges()))
+
+    log.info("Calculando equivalencia regular para '{}'...".format(tipo))
+    b.classifyNodesRegularEquivalence('class')
+    log.info('...ok')
+
+    attrName = tipo+'_regularClass'
+    spec = gr.AttrSpec(attrName, 'int')
+    a.addNodeAttrSpec(spec)
+    for node in b.nodes():
+        a.setNodeAttr(node, attrName, b.getNodeAttr(node, 'class'))
+
+    nodeAttrs, edgeAttrs, nodeSpecs, edgeSpecs = gr.agregateClassAttr(a,
+        nodeClassAttr=attrName, edgeClassAttr=RELATION_ATTR,
+        edgeAttrs=[WEIGHT_ATTR])
+
+    b = b.spawnFromClassAttributes(nodeClassAttr='class',
+            edgeClassAttr=RELATION_ATTR)
+
+    components = gr.weaklyConnectedComponents(b)
+    b.setNodeAttrFromDict('component',components, default=0, attrType='int')
+
+    for spec in nodeSpecs:
+        b.addNodeAttrSpec(spec)
+        b.setNodeAttrFromDict(spec.name, nodeAttrs[spec.name])
+    for spec in edgeSpecs:
+        b.addEdgeAttrSpec(spec)
+        b.setEdgeAttrFromDict(spec.name, edgeAttrs[spec.name])
+
+    fileName = os.path.join(DIR_OUTPUT,tipo+'.graphml')
+    log.info('Salvando grafo {} com {} nodos e {} arestas...'.format(fileName,
+            b.getNumNodes(), b.getNumEdges()))
+    b.writeGraphml(fileName)
+    log.info('...ok')
 
 def criaArffParaNodos(g, fileName, attrs):
     """Cria um arquivo arff que lista os nodos o valor de cada atributo listado
@@ -217,7 +316,7 @@ def relationShipParaAtributoDeAresta(g, tiposArestas, weightAttr):
 
     return novo, atributos
 
-def contandoIteracoesPorNodo(g, tiposIteracoes):
+def contandoInteracoesPorNodo(g, tiposInteracoes):
     """Soma em cada nodo o total de cada tipo de arestas de saída e de entrada
     que o nodo possui.
 
@@ -227,7 +326,7 @@ def contandoIteracoesPorNodo(g, tiposIteracoes):
 
     atributos = []
     
-    for tipo in tiposIteracoes:
+    for tipo in tiposInteracoes:
         attrName = tipo+'_in'
         spec = gr.AttrSpec(attrName, 'int', 0)
         g.addNodeAttrSpec(spec)
@@ -239,7 +338,7 @@ def contandoIteracoesPorNodo(g, tiposIteracoes):
 
     for edge in g.edges():
         src, tgt, _ = edge
-        for tipo in tiposIteracoes:
+        for tipo in tiposInteracoes:
             contEdge = g.getEdgeAttr(edge, tipo, 0)
 
             tipoOut = tipo+'_out'
@@ -260,10 +359,14 @@ def contandoArestasComMesmaOrigemEDestino(g):
     for src, tgt, rel in g.edges():
         count[(src, tgt)] += 1
 
-    for k, v in count.items():
-        print(k,v)
+    paralelas = 0
+    for v in count.values():
+        if v > 1:
+            paralelas += 1
 
-def limpezaDeAtributos(g, nodeAttrs, edgeAttrs):
+    return paralelas
+
+def limpezaDeAtributos(g, nodeAttrs, edgeAttrs, log):
     """Limpa os atributos de um grafo, mantendo apenas os atributos de
     interesse.
 
@@ -275,22 +378,56 @@ def limpezaDeAtributos(g, nodeAttrs, edgeAttrs):
     names = list(g.nodeAttrSpecs.keys())
     for name in names:
         if name not in nodeAttrs:
-            print("Removendo {}".format(name))
+            log.debug("Removendo {}".format(name))
             g.removeNodeAttr(name)
 
     names = list(g.edgeAttrSpecs.keys())
     for name in names:
         if name not in edgeAttrs:
-            print("Removendo {}".format(name))
+            log.debug("Removendo {}".format(name))
             g.removeEdgeAttr(name)
 
-def imprimeAtributos(g):
-    print('Atributos de nodos:')
+def imprimeAtributos(g, log):
+    log.debug('Atributos de nodos:')
     for spec in g.nodeAttrSpecs.values():
-        print('  "{0}": {1} {2}'.format(spec.name, spec.type, spec.default))
-    print('Atributos de arestas:')
+        log.degug('  "{0}": {1} {2}'.format(spec.name, spec.type, spec.default))
+    log.debug('Atributos de arestas:')
     for spec in g.edgeAttrSpecs.values():
-        print('  "{0}": {1} {2}'.format(spec.name, spec.type, spec.default))
+        log.debug('  "{0}": {1} {2}'.format(spec.name, spec.type, spec.default))
+
+def configureLogging():
+    config = {
+        'version': 1,
+        'formatters': {
+            'brief': {
+                'format': '%(message)s'
+            },
+            'detail': {
+                'format': '%(asctime)s|%(levelname)s:%(message)s'
+            }
+        },
+        'handlers': {
+            'console': {
+                'class': 'logging.StreamHandler',
+                'level': 'INFO',
+                'formatter': 'brief'
+            },
+            'arquivo': {
+                'class': 'logging.FileHandler',
+                'level': 'DEBUG',
+                'formatter': 'detail',
+                'filename': ARQ_LOG,
+                'mode': 'w'
+            }
+        },
+        'root': {
+            'handlers': ['console', 'arquivo'],
+            'level': 'DEBUG'
+        }
+    }
+    logging.config.dictConfig(config)
 
 if __name__ == '__main__':
-    main()
+    configureLogging()
+    logger = logging.getLogger()
+    main(logger)

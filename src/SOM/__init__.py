@@ -74,6 +74,14 @@ class Config(object):
 
         self.neighWeight = self.neighWeightTrain
 
+    def dictConfig(self, conf):
+        """Configura este objeto a partir do dicionario fornecido.
+        """
+
+        for k, v in conf.items():
+            if hasattr(self, k):
+                setattr(self, k, v)
+
     def applyTraingWeight(self):
         self.neighWeight = self.neighWeightTrain
 

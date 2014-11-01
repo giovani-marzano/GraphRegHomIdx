@@ -11,8 +11,10 @@ __author__ = "Giovani Melo Marzano"
 from . import Config, AbstractSOMap, AbstractSOMNode
 import graph as gr
 import math
+import sys
 
-from future_builtins import zip
+if sys.version_info.major < 3:
+    from future_builtins import zip
 
 def euclidDistSq(a, b):
     """Distancia euclidiana ao quadrado de dois vetores.
