@@ -1,6 +1,9 @@
 #!/usr/bin/python3
 # coding: utf-8
 
+#---------------------------------------------------------------------
+# Seção de importação de modulos
+#---------------------------------------------------------------------
 from __future__ import print_function
 
 import graph as gr
@@ -20,18 +23,87 @@ else:
     def u(x):
         return x
 
+#---------------------------------------------------------------------
+# Variaveis globais de configuração
+#---------------------------------------------------------------------
+
+# Nome do atributo de arestas do graphml que indica o tipo (relação) da aresta.
+# No caso o tipo da aresta representa o tipo de interação entre duas pessoas no
+# facebook.
 RELATION_ATTR = 'Relationship'
+
+# Nome do atributo de arestas do graphml que contém o peso da aresta. No caso o
+# peso indica quantas interações de um determinado tipo ocorreram.
 WEIGHT_ATTR = 'Edge Weight'
-NODE_ID_ATTR = 'n-id'
-NODE_NAME_ATTR = 'n-name'
+
+# Variavéis que controlam de onde os dados de entrada serão lidos
+DIR_INPUT = 'data'
+ARQ_IN = os.path.join(DIR_INPUT,'face.graphml')
+
+# Variáveis que controlam onde os dados de saida do script serão salvos
 DIR_OUTPUT = 'data'
-ARQ_IN = os.path.join(DIR_OUTPUT,'face.graphml')
 ARFF_NODOS = os.path.join(DIR_OUTPUT, 'nodos.arff')
 ARFF_EDGES = os.path.join(DIR_OUTPUT, 'edges.arff')
 ARQ_AGREGADO = os.path.join(DIR_OUTPUT,'agregado.graphml')
 ARQ_PROCESSADO = os.path.join(DIR_OUTPUT,'processado.graphml')
-ARQ_LOG = os.path.join(DIR_OUTPUT,'log.txt')
+ARQ_SOM_NODES = os.path.join(DIR_OUTPUT,'SOMNodes.graphml')
+ARQ_SOM_EDGES = os.path.join(DIR_OUTPUT,'SOMEdges.graphml')
+ARQ_CLASSES_SOM = os.path.join(DIR_OUTPUT, 'classesSOM.graphml')
 
+# Configurações para controlar o algoritmo SOM
+SOM_NODES_CONFIG = {
+    'FVU': 0.2,
+    'maxNodes': 20,
+    'neighWeightTrain': 0.5,
+    'neighWeightRefine': 0,
+    'maxStepsPerGeneration': 100,
+    'MSTPeriod': 10
+}
+
+SOM_EDGES_CONFIG = {
+    'FVU': 0.2,
+    'maxNodes': 3,
+    'neighWeightTrain': 0.5,
+    'neighWeightRefine': 0,
+    'maxStepsPerGeneration': 100,
+    'MSTPeriod': 10
+}
+
+# Configurações para controlar a geração de log pelo script
+ARQ_LOG = os.path.join(DIR_OUTPUT,'log.txt')
+LOG_CONFIG = {
+    'version': 1,
+    'formatters': {
+        'brief': {
+            'format': '%(message)s'
+        },
+        'detail': {
+            'format': '%(asctime)s|%(levelname)s:%(message)s'
+        }
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'level': 'INFO',
+            'formatter': 'brief'
+        },
+        'arquivo': {
+            'class': 'logging.FileHandler',
+            'level': 'DEBUG',
+            'formatter': 'detail',
+            'filename': ARQ_LOG,
+            'mode': 'w'
+        }
+    },
+    'root': {
+        'handlers': ['console', 'arquivo'],
+        'level': 'DEBUG'
+    }
+}
+
+#---------------------------------------------------------------------
+# Função principal do script
+#---------------------------------------------------------------------
 def main(log):
     """Função principal do script, executada no final do arquivo.
     """
@@ -58,6 +130,10 @@ def main(log):
     geral.writeGraphml(ARQ_PROCESSADO)
     log.info('...ok')
 
+#---------------------------------------------------------------------
+# Definição das funções auxiliares e procedimentos macro do script
+#---------------------------------------------------------------------
+
 def preprocessaGrafo(geral, log):
     limpezaDeAtributos(geral, [], [WEIGHT_ATTR, RELATION_ATTR], log)
     imprimeAtributos(geral, log)
@@ -76,22 +152,78 @@ def processamentoTiposArestasAgregados(geral, log, tiposInteracoes):
     # Agregando as arestas diferentes entre dois nós e contando os tipos de
     # arestas.
     log.info('Agregando arestas...')
-    novo, edgeIterations = relationShipParaAtributoDeAresta(
+    novo, edgeInterations = relationShipParaAtributoDeAresta(
             geral, tiposInteracoes, WEIGHT_ATTR)
-    log.info('...atributos criados:'+str(list(edgeIterations)))
+    log.info('...atributos criados:'+str(list(edgeInterations)))
 
     log.info('Agregando por nodo...')
-    nodeIterations = contandoInteracoesPorNodo(novo, tiposInteracoes)
-    log.info('...atributos criados:'+str(list(nodeIterations)))
+    nodeInterations = contandoInteracoesPorNodo(novo, tiposInteracoes)
+    log.info('...atributos criados:'+str(list(nodeInterations)))
 
-    criaArffParaNodos(novo, ARFF_NODOS, nodeIterations)
+    criaArffParaNodos(novo, ARFF_NODOS, nodeInterations)
     log.info('Arquivo {} criado'.format(ARFF_NODOS))
-    criaArffParaArestas(novo, ARFF_EDGES, edgeIterations)
+    criaArffParaArestas(novo, ARFF_EDGES, edgeInterations)
     log.info('Arquivo {} criado'.format(ARFF_EDGES))
+
+    processaGrafoAgregadoComSOM(novo, log, nodeInterations, edgeInterations)
 
     log.info('Salvando grafo agregado em {}'.format(ARQ_AGREGADO))
     novo.writeGraphml(ARQ_AGREGADO)
 
+def processaGrafoAgregadoComSOM(g, log, nodeInterations, edgeInterations):
+
+    # Extraindo os vetores de nodos
+    elements = g.extractNodeFeatureVectors(nodeInterations)
+
+    som = somV.SOMap('Nodes')
+    som.conf.dictConfig(SOM_NODES_CONFIG)
+    som.elements = list(elements.values())
+    log.info('Treinando SOM para nodos...')
+    som.trainGrowingTree()
+    log.info('...ok')
+
+    # Recuperando os classes geradas para cada nodo
+    classes, quantErr = som.classifyMapOfElements(elements)
+
+    # Atribuindo ao nodos do grafo as classes do SOM
+    g.setNodeAttrFromDict('SOM_class', classes, default=-1, attrType='int')
+    g.setNodeAttrFromDict('SOM_quantErr', quantErr, default=0, attrType='double')
+
+    # Salvando o som de nodos
+    gsom = somV.convertSOMapToMultiGraph(som)
+    gsom.writeGraphml(ARQ_SOM_NODES)
+
+    # Mesma coisa para as arestas
+
+    # Extraindo os vetores de arestas
+    elements = g.extractEdgeFeatureVectors(edgeInterations)
+
+    som = somV.SOMap('Edges')
+    som.conf.dictConfig(SOM_EDGES_CONFIG)
+    som.elements = list(elements.values())
+    log.info('Treinando SOM para arestas...')
+    som.trainGrowingTree()
+    log.info('...ok')
+
+    # Recuperando os classes geradas para cada aresta
+    classes, quantErr = som.classifyMapOfElements(elements)
+
+    # Atribuindo às arestas do grafo as classes do SOM
+    g.setEdgeAttrFromDict('SOM_class', classes, default=-1, attrType='int')
+    g.setEdgeAttrFromDict('SOM_quantErr', quantErr, default=0, attrType='double')
+
+    # Salvando o som de nodos
+    gsom = somV.convertSOMapToMultiGraph(som)
+    gsom.writeGraphml(ARQ_SOM_EDGES)
+
+    # gerando grafo de classes
+    gclass = g.spawnFromClassAttributes(nodeClassAttr='SOM_class',
+            edgeClassAttr='SOM_class')
+
+    log.info("Salvando '{}': {} nodos e {} arestas...".format(ARQ_CLASSES_SOM,
+                gclass.getNumNodes(), gclass.getNumEdges()))
+    gclass.writeGraphml(ARQ_CLASSES_SOM)
+    log.info('...ok')
 
 def grafoEquivRegularSoUmTipoAresta(a, tipo, log):
     """Extrai do grafo original o subgrafo que possui apenas um dos tipos de
@@ -395,39 +527,10 @@ def imprimeAtributos(g, log):
     for spec in g.edgeAttrSpecs.values():
         log.debug('  "{0}": {1} {2}'.format(spec.name, spec.type, spec.default))
 
-def configureLogging():
-    config = {
-        'version': 1,
-        'formatters': {
-            'brief': {
-                'format': '%(message)s'
-            },
-            'detail': {
-                'format': '%(asctime)s|%(levelname)s:%(message)s'
-            }
-        },
-        'handlers': {
-            'console': {
-                'class': 'logging.StreamHandler',
-                'level': 'INFO',
-                'formatter': 'brief'
-            },
-            'arquivo': {
-                'class': 'logging.FileHandler',
-                'level': 'DEBUG',
-                'formatter': 'detail',
-                'filename': ARQ_LOG,
-                'mode': 'w'
-            }
-        },
-        'root': {
-            'handlers': ['console', 'arquivo'],
-            'level': 'DEBUG'
-        }
-    }
-    logging.config.dictConfig(config)
-
+#---------------------------------------------------------------------
+# Execução do script
+#---------------------------------------------------------------------
 if __name__ == '__main__':
-    configureLogging()
+    logging.config.dictConfig(LOG_CONFIG)
     logger = logging.getLogger()
     main(logger)

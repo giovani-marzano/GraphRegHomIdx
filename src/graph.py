@@ -424,6 +424,8 @@ class MultiGraph(object):
 
         :param attrs: Lista com os nomes dos atributos que devem compor o vetor
             de cada nodo.
+
+        :return: Dicionário que mapeia cada nodo a seu vetor de valores
         """
         featureVectors = {}
 
