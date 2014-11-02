@@ -228,7 +228,7 @@ class SOMap(AbstractSOMap):
         self.train()
         self._printGridSumary("Refine",neighDepth, neighDepthMin)
 
-def convertSOMapToMultiGraph(som):
+def convertSOMapToMultiGraph(som, attrNames=[], nodeIDAttr='ID'):
     """Cria um MultiGraph a partir de um SOM baseado em vetores.
 
     OBS: O SOM é um grafo não direcionado, mas a classe MultiGraph considera que
@@ -239,9 +239,13 @@ def convertSOMapToMultiGraph(som):
     método pode-se recuperar a vizinhança não direcionada do SOM original.
 
     :param som: SOM a ser convertido em grafo
+    :param attrNames: Lista com o nome de cada atributo que compõe o espaço
+        vetorial.
+    :param nodeIDAttr: Nome do atributo que conterá o ID de cada nodo do SOM.
 
     :return: Instancia de MultiGraph
     """
+
 
     g = gr.MultiGraph()
 
@@ -253,22 +257,30 @@ def convertSOMapToMultiGraph(som):
     g.setGraphAttr(dimensionSpec.name, dimension)
 
     # Criando atributos de nodos
-    numElemSpec = gr.AttrSpec('numElem', 'int', 0)
-    g.addNodeAttrSpec(numElemSpec)
+    attrNameFmt = '{{0:{}}}'.format(int(math.floor(math.log10(100))) + 1)
+
+    for i in range(len(attrNames),dimension):
+        attrNames.append(attrNameFmt.format(i))
 
     meanSpecs = []
     stdevSpecs = []
     refSpecs = []
-    for i in range(dimension):
-        spec = gr.AttrSpec('mean[{}]'.format(i), 'double', 0)
+    for attr in attrNames:
+        spec = gr.AttrSpec(attr+'_mean', 'double', 0)
         meanSpecs.append(spec)
         g.addNodeAttrSpec(spec)
-        spec = gr.AttrSpec('stdev[{}]'.format(i), 'double', 0)
+        spec = gr.AttrSpec(attr+'_stdev', 'double', 0)
         stdevSpecs.append(spec)
         g.addNodeAttrSpec(spec)
-        spec = gr.AttrSpec('ref[{}]'.format(i), 'double', 0)
+        spec = gr.AttrSpec(attr+'_ref', 'double', 0)
         refSpecs.append(spec)
         g.addNodeAttrSpec(spec)
+
+    numElemSpec = gr.AttrSpec('numElem', 'int', 0)
+    g.addNodeAttrSpec(numElemSpec)
+
+    idSpec = gr.AttrSpec(nodeIDAttr, 'int', 0)
+    g.addNodeAttrSpec(idSpec)
 
     # Criando atributos de aresta
     distSpec = gr.AttrSpec('dist', 'double', 0)
@@ -278,6 +290,7 @@ def convertSOMapToMultiGraph(som):
         n = node.getID()
         g.addNode(n)
         g.setNodeAttr(n, numElemSpec.name, node.getNumElements())
+        g.setNodeAttr(n, idSpec.name, n)
         mean = node.getMeanElement()
         stdev = node.getStdevVect()
         for i in range(dimension):

@@ -190,7 +190,8 @@ def processaGrafoAgregadoComSOM(g, log, nodeInterations, edgeInterations):
     g.setNodeAttrFromDict('SOM_quantErr', quantErr, default=0, attrType='double')
 
     # Salvando o som de nodos
-    gsom = somV.convertSOMapToMultiGraph(som)
+    gsom = somV.convertSOMapToMultiGraph(som,
+            attrNames=nodeInterations, nodeIDAttr='SOM_class')
     gsom.writeGraphml(ARQ_SOM_NODES)
 
     # Mesma coisa para as arestas
@@ -213,12 +214,21 @@ def processaGrafoAgregadoComSOM(g, log, nodeInterations, edgeInterations):
     g.setEdgeAttrFromDict('SOM_quantErr', quantErr, default=0, attrType='double')
 
     # Salvando o som de nodos
-    gsom = somV.convertSOMapToMultiGraph(som)
+    gsom = somV.convertSOMapToMultiGraph(som,
+            attrNames=edgeInterations, nodeIDAttr='SOM_class')
     gsom.writeGraphml(ARQ_SOM_EDGES)
 
     # gerando grafo de classes
     gclass = g.spawnFromClassAttributes(nodeClassAttr='SOM_class',
             edgeClassAttr='SOM_class')
+
+    # Computando atributos agregados
+    attrNodes, attrEdges, specNodes, specEdges = gr.agregateClassAttr(g,
+        nodeClassAttr='SOM_class', edgeClassAttr='SOM_class',
+        nodeAttrs=nodeInterations, edgeAttrs=edgeInterations)
+
+    gr.addAtributeSetsToGraph(gclass, attrNodes, attrEdges, specNodes,
+            specEdges)
 
     log.info("Salvando '{}': {} nodos e {} arestas...".format(ARQ_CLASSES_SOM,
                 gclass.getNumNodes(), gclass.getNumEdges()))

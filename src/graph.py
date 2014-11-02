@@ -688,6 +688,26 @@ def agregateClassAttr(gOri, nodeClassAttr=None, edgeClassAttr=None, nodeAttrs=No
 
     return nodeAttrDicts, edgeAttrDicts, nodeSpecs, edgeSpecs
 
+def addAtributeSetsToGraph(g, attrNodes, attrEdges, specNodes, specEdges):
+    if attrNodes is None:
+        attrNodes = {}
+    if attrEdges is None:
+        attrEdges = {}
+    if specNodes is None:
+        specNodes = []
+    if specEdges is None:
+        specEdges = []
+
+    for spec in specNodes:
+        g.addNodeAttrSpec(spec)
+    for spec in specEdges:
+        g.addEdgeAttrSpec(spec)
+
+    for attr, values in attrNodes.items():
+        g.setNodeAttrFromDict(attr, values)
+
+    for attr, values in attrEdges.items():
+        g.setEdgeAttrFromDict(attr, values)
 
 def weaklyConnectedComponents(g):
     """Associa a cada nodo do grafo a um número que representa a componente
