@@ -6,14 +6,21 @@
 #---------------------------------------------------------------------
 from __future__ import print_function
 
-import graph as gr
+import os.path
 import collections
 import io
-import sys
-import SOM.vectorBased as somV
 import logging
 import logging.config
-import os.path
+
+import sys
+
+# Acrescentando o diretorio lib ao path. Lembrando que sys.path[0] representa o
+# diretório onde este script se encontra
+
+sys.path.append(os.path.join(sys.path[0],'lib'))
+
+import graph as gr
+import SOM.vectorBased as somV
 
 if sys.version_info.major < 3:
     import codecs
