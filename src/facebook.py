@@ -45,7 +45,7 @@ WEIGHT_ATTR = 'Edge Weight'
 
 # Variavéis que controlam de onde os dados de entrada serão lidos
 DIR_INPUT = 'data'
-ARQ_IN = os.path.join(DIR_INPUT,'face.graphml')
+ARQ_IN = os.path.join(DIR_INPUT,'face.csv')
 
 # Variáveis que controlam onde os dados de saida do script serão salvos
 DIR_OUTPUT = 'data'
@@ -141,9 +141,31 @@ def main(log):
 # Definição das funções auxiliares e procedimentos macro do script
 #---------------------------------------------------------------------
 
-def carregaGrafo(fileName, relationAttr):
-    geral = gr.loadGraphml(ARQ_IN, relationAttr=RELATION_ATTR)
-    return geral
+def carregaGrafo(fileName, relationAttr=RELATION_ATTR,
+        weightAttr=WEIGHT_ATTR):
+    #g = gr.loadGraphml(ARQ_IN, relationAttr=RELATION_ATTR)
+    g = gr.MultiGraph()
+
+    relSpec = gr.AttrSpec(relationAttr,'string')
+    weiSpec = gr.AttrSpec(weightAttr, 'int', 0)
+
+    g.addEdgeAttrSpec(relSpec)
+    g.addEdgeAttrSpec(weiSpec)
+
+    with io.open(ARQ_IN,'r',encoding='utf-8') as f:
+        for line in f:
+            campos = line.split(';')
+
+            src = campos[0]
+            tgt = campos[1]
+            rel = campos[2]
+            weight = int(campos[3])
+
+            g.addEdge(src, tgt, rel)
+            e = (src, tgt, rel)
+            g.setEdgeAttr(e, relSpec.name, rel)
+            g.setEdgeAttr(e, weiSpec.name, weight)
+    return g
 
 def preprocessaGrafo(geral, log):
     limpezaDeAtributos(geral, [], [WEIGHT_ATTR, RELATION_ATTR], log)
