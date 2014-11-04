@@ -115,7 +115,7 @@ def main(log):
     """Função principal do script, executada no final do arquivo.
     """
     log.info('Carregando grafo {}...'.format(ARQ_IN))
-    geral = gr.loadGraphml(ARQ_IN, relationAttr=RELATION_ATTR)
+    geral = carregaGrafo(ARQ_IN, relationAttr=RELATION_ATTR)
     log.info('... carregado: {} nodos e {} arestas'.format(geral.getNumNodes(),
                 geral.getNumEdges()))
 
@@ -140,6 +140,10 @@ def main(log):
 #---------------------------------------------------------------------
 # Definição das funções auxiliares e procedimentos macro do script
 #---------------------------------------------------------------------
+
+def carregaGrafo(fileName, relationAttr):
+    geral = gr.loadGraphml(ARQ_IN, relationAttr=RELATION_ATTR)
+    return geral
 
 def preprocessaGrafo(geral, log):
     limpezaDeAtributos(geral, [], [WEIGHT_ATTR, RELATION_ATTR], log)
