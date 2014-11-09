@@ -118,15 +118,16 @@ class Config(object):
         self.neighWeight = (-1.0)/(maxdepth+1) + 1.0
 
     def calcMaxDepthForWeight(self, minweight):
-        """Calcula a profundidade 'p' que gera o peso minweight
-        (aproximadamente) e que a próxima profundidade seja zero.
+        """Calcula a profundidade maxima 'p' que gera o peso minweight
+        (aproximadamente) na profindidade 1, sendo que a profundidade p+1 seja
+        zero.
 
-        Reta de decaimento dada pelos pontos (0,1) (p+1,0) e queremos encontrar
-        'p' em (p, minweight)
+        Reta de decaimento dada pelos pontos (0,1) (1,minweight) e queremos encontrar
+        'p' em (p+1, 0)
         """
-        if minweight == 0:
+        if minweight == 1:
             return 0
-        depth = (1 - minweight)/minweight
+        depth = 1.0/(1.0 - minweight) - 1.0
         return max(0,depth)
 
 

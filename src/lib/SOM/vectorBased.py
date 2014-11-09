@@ -214,7 +214,7 @@ class SOMap(AbstractSOMap):
         self.numSteps = 0
 
         self._initializeHexGrid(nrows, ncols)
-        neighDepth = max(nrows/2, ncols/2)
+        neighDepth = max(nrows, ncols)
         neighDepthMin = self.conf.calcMaxDepthForWeight(
                 self.conf.neighWeightTrain)
 

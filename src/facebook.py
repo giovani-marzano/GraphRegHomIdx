@@ -59,6 +59,7 @@ ARFF_EDGES = os.path.join(DIR_OUTPUT, 'edges.arff')
 ARQ_AGREGADO = os.path.join(DIR_OUTPUT,'agregado.graphml')
 ARQ_PROCESSADO = os.path.join(DIR_OUTPUT,'processado.graphml')
 ARQ_SOM_NODES = os.path.join(DIR_OUTPUT,'SOMNodes.graphml')
+ARQ_SOM_GRID_NODES = os.path.join(DIR_OUTPUT,'SOMGridNodes.graphml')
 ARQ_SOM_EDGES = os.path.join(DIR_OUTPUT,'SOMEdges.graphml')
 ARQ_CLASSES_SOM = os.path.join(DIR_OUTPUT, 'classesSOM.graphml')
 
@@ -79,6 +80,16 @@ SOM_EDGES_CONFIG = {
     'neighWeightRefine': 0.25,
     'maxStepsPerGeneration': 100,
     'MSTPeriod': 10
+}
+
+SOM_GRID_NODES_CONFIG = {
+    'FVU': 0.2,
+    'maxNodes': 20,
+    'neighWeightTrain': 0.5,
+    'neighWeightRefine': 0.25,
+    'maxStepsPerGeneration': 100,
+    'nrows': 5,
+    'ncols': 4
 }
 
 # Configurações para controlar a geração de log pelo script
@@ -220,6 +231,8 @@ def processaGrafoAgregadoComSOM(g, log, nodeInterations, edgeInterations):
     # Extraindo os vetores de nodos
     elements = g.extractNodeFeatureVectors(nodeInterations)
 
+    criaSOMGridParaNodos(log, elements, nodeInterations)
+
     som = somV.SOMap('Nodes')
     som.conf.dictConfig(SOM_NODES_CONFIG)
     som.elements = list(elements.values())
@@ -279,6 +292,22 @@ def processaGrafoAgregadoComSOM(g, log, nodeInterations, edgeInterations):
                 gclass.getNumNodes(), gclass.getNumEdges()))
     gclass.writeGraphml(ARQ_CLASSES_SOM)
     log.info('...ok')
+
+def criaSOMGridParaNodos(log, elements, nodeInterations):
+    som = somV.SOMap('Nodes HexGrid')
+    som.conf.dictConfig(SOM_GRID_NODES_CONFIG)
+    som.elements = list(elements.values())
+    log.info('Treinando SOM Grid para nodos...')
+    som.trainHexGrid(
+        SOM_GRID_NODES_CONFIG.get('nrows', 5),
+        SOM_GRID_NODES_CONFIG.get('ncols', 4)
+    )
+    log.info('...ok')
+
+    # Salvando o som de nodos
+    gsom = somV.convertSOMapToMultiGraph(som,
+            attrNames=nodeInterations, nodeIDAttr='ID')
+    gsom.writeGraphml(ARQ_SOM_GRID_NODES)
 
 def grafoEquivRegularSoUmTipoAresta(a, tipo, log):
     """Extrai do grafo original o subgrafo que possui apenas um dos tipos de
