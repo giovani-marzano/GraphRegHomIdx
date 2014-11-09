@@ -302,15 +302,15 @@ class AbstractSOMap(object):
         self.FVU = sumDistSq/self.SStot
 
     def _grow(self):
-        maxVariance = 0.0
+        maxDist = 0.0
         growNode = None
 
         for node in self.nodes:
             if node.getNumElements() <= 0:
                 continue
-            var = node.getSumDistFromMeanSquared()/node.getNumElements()
-            if var > maxVariance:
-                maxVariance = var
+            dist = node.getSumDistFromMeanSquared()
+            if dist > maxDist:
+                maxDist = dist
                 growNode = node
 
         if growNode == None:
