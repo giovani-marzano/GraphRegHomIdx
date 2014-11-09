@@ -11,6 +11,7 @@ import collections
 import io
 import logging
 import logging.config
+import csv
 
 import sys
 
@@ -47,6 +48,10 @@ WEIGHT_ATTR = 'Edge Weight'
 DIR_INPUT = 'data'
 ARQ_IN = os.path.join(DIR_INPUT,'face.csv')
 
+CSV_OPTIONS = {
+    'delimiter': ';'
+}
+
 # Variáveis que controlam onde os dados de saida do script serão salvos
 DIR_OUTPUT = 'data'
 ARFF_NODOS = os.path.join(DIR_OUTPUT, 'nodos.arff')
@@ -61,8 +66,8 @@ ARQ_CLASSES_SOM = os.path.join(DIR_OUTPUT, 'classesSOM.graphml')
 SOM_NODES_CONFIG = {
     'FVU': 0.2,
     'maxNodes': 20,
-    'neighWeightTrain': 0.5,
-    'neighWeightRefine': 0,
+    'neighWeightTrain': 0.25,
+    'neighWeightRefine': 0.25,
     'maxStepsPerGeneration': 100,
     'MSTPeriod': 10
 }
@@ -70,8 +75,8 @@ SOM_NODES_CONFIG = {
 SOM_EDGES_CONFIG = {
     'FVU': 0.2,
     'maxNodes': 3,
-    'neighWeightTrain': 0.5,
-    'neighWeightRefine': 0,
+    'neighWeightTrain': 0.25,
+    'neighWeightRefine': 0.25,
     'maxStepsPerGeneration': 100,
     'MSTPeriod': 10
 }
@@ -143,19 +148,23 @@ def main(log):
 
 def carregaGrafo(fileName, relationAttr=RELATION_ATTR,
         weightAttr=WEIGHT_ATTR):
-    #g = gr.loadGraphml(ARQ_IN, relationAttr=RELATION_ATTR)
-    g = gr.MultiGraph()
 
-    relSpec = gr.AttrSpec(relationAttr,'string')
-    weiSpec = gr.AttrSpec(weightAttr, 'int', 0)
+    _, ext = os.path.splitext(ARQ_IN)
 
-    g.addEdgeAttrSpec(relSpec)
-    g.addEdgeAttrSpec(weiSpec)
+    if ext == '.graphml':
+        g = gr.loadGraphml(ARQ_IN, relationAttr=RELATION_ATTR)
+    elif ext == '.csv':
+        g = gr.MultiGraph()
 
-    with io.open(ARQ_IN,'r',encoding='utf-8') as f:
-        for line in f:
-            campos = line.split(';')
+        relSpec = gr.AttrSpec(relationAttr,'string')
+        weiSpec = gr.AttrSpec(weightAttr, 'int', 0)
 
+        g.addEdgeAttrSpec(relSpec)
+        g.addEdgeAttrSpec(weiSpec)
+
+        csvReader = csv.reader(open(ARQ_IN, newline=''), **CSV_OPTIONS)
+
+        for campos in csvReader:
             src = campos[0]
             tgt = campos[1]
             rel = campos[2]
@@ -165,6 +174,9 @@ def carregaGrafo(fileName, relationAttr=RELATION_ATTR,
             e = (src, tgt, rel)
             g.setEdgeAttr(e, relSpec.name, rel)
             g.setEdgeAttr(e, weiSpec.name, weight)
+    else:
+        raise IOError("Tipo de arquivo não suportado - '{}'".format(ext))
+
     return g
 
 def preprocessaGrafo(geral, log):
