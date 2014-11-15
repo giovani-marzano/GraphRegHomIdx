@@ -25,4 +25,5 @@ Referências
   Douglas R. WHITE and Karl P. REITZ. Fala sobre os tipos de homomorfismos.
 
 - Artigo "Silhouettes: a graphical aid to the interpretation and validation of
-  cluster analysis" (arquivo "Silhouette Coefficient.pdf").
+  cluster analysis" de Peter J. Rousseuw (1986) (arquivo "Silhouette
+  Coefficient.pdf").
