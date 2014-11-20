@@ -228,6 +228,7 @@ class SOMap(AbstractSOMap):
         self.train()
         self._printGridSumary("Refine",neighDepth, neighDepthMin)
 
+
 def convertSOMapToMultiGraph(som, attrNames=[], nodeIDAttr='ID'):
     """Cria um MultiGraph a partir de um SOM baseado em vetores.
 
@@ -257,7 +258,7 @@ def convertSOMapToMultiGraph(som, attrNames=[], nodeIDAttr='ID'):
     g.setGraphAttr(dimensionSpec.name, dimension)
 
     # Criando atributos de nodos
-    attrNameFmt = '{{0:{}}}'.format(int(math.floor(math.log10(100))) + 1)
+    attrNameFmt = '{{0:{}}}'.format(int(math.floor(math.log10(dimension))) + 1)
 
     for i in range(len(attrNames),dimension):
         attrNames.append(attrNameFmt.format(i))
@@ -279,6 +280,12 @@ def convertSOMapToMultiGraph(som, attrNames=[], nodeIDAttr='ID'):
     numElemSpec = gr.AttrSpec('numElem', 'int', 0)
     g.addNodeAttrSpec(numElemSpec)
 
+    sseSpec = gr.AttrSpec('sse', 'double', 0)
+    g.addNodeAttrSpec(sseSpec)
+
+    dispSpec = gr.AttrSpec('disp', 'double', 0)
+    g.addNodeAttrSpec(dispSpec)
+
     idSpec = gr.AttrSpec(nodeIDAttr, 'int', 0)
     g.addNodeAttrSpec(idSpec)
 
@@ -290,6 +297,14 @@ def convertSOMapToMultiGraph(som, attrNames=[], nodeIDAttr='ID'):
         n = node.getID()
         g.addNode(n)
         g.setNodeAttr(n, numElemSpec.name, node.getNumElements())
+        g.setNodeAttr(n, sseSpec.name, node.getSumDistFromMeanSquared())
+        if node.getNumElements() > 0:
+            disp = math.sqrt(
+                node.getSumDistFromMeanSquared()/node.getNumElements())
+        else:
+            disp = 0.0
+        g.setNodeAttr(n, dispSpec.name, disp)
+
         g.setNodeAttr(n, idSpec.name, n)
         mean = node.getMeanElement()
         stdev = node.getStdevVect()
