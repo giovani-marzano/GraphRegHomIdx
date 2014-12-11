@@ -295,6 +295,33 @@ class ListSelectionDialog(Dialog):
     def apply(self):
         self.result = self._selFrame.getSelection()
 
+class ListSelecManyDialog(Dialog):
+    """Dialog that permits the user to select many items from a list.
+    """
+    def __init__(self, parent, title=None,
+            text='', items=[], filterText=''):
+
+        self._text = text
+        self._items = items
+        self._filterText = filterText
+        self.result = []
+
+        super().__init__(parent, title)
+
+    def body(self, master):
+        self._selFrame = ListSelecManyFrame(master,
+                filterText=self._filterText)
+
+        self._selFrame.setItems(self._items)
+        self._selFrame.pack(side='top', expand=True, fill='both')
+
+        master.pack(expand=True, fill='both')
+
+        return self._selFrame
+
+    def apply(self):
+        self.result = self._selFrame.getSelection()
+
 if __name__ == '__main__':
     app = tk.Tk()
     a = ListSelecManyFrame(app)
