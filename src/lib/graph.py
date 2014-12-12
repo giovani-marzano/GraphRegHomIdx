@@ -777,7 +777,7 @@ def writeGraphml(mGraph, filePath, encoding="UTF-8"):
     nodeAttrIDs = {}
     edgeAttrs = sorted(mGraph.edgeAttrSpecs.keys())
     edgeAttrIDs = {}
-    dataCount = 0
+    dataCount = 10
     for attrName in graphAttrs:
         graphAttrIDs[attrName] = 'd{}'.format(dataCount)
         dataCount += 1
