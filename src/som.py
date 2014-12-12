@@ -22,6 +22,7 @@ sys.path.append(os.path.join(sys.path[0],'lib'))
 
 import graph as gr
 import SOM.vectorBased as somV
+import silhouette as silhou
 
 if sys.version_info.major < 3:
     import codecs
@@ -37,21 +38,21 @@ else:
 
 # Variavéis que controlam de onde os dados de entrada serão lidos
 DIR_INPUT = '.'
-ARQ_IN = os.path.join(DIR_INPUT,'entrada.csv')
+ARQ_IN = os.path.join(DIR_INPUT,'teste.csv')
 
 # Configuracao de que colunas do arquivo csv que serao utilizadas
 # Nome das colunas de identificacao
-ID_ATTRS = ['id','di']
+ID_ATTRS = ['um']
 # Nome das colunas de valores
-VALUE_ATTRS = ['a','b','c']
+VALUE_ATTRS = ['dois','tres','quatro']
 
 # Configuraçoes do formato do arquivo CSV
 CSV_OPTIONS = {
-    'delimiter': ';'
+    'delimiter': ','
 }
 
 # Variáveis que controlam onde os dados de saida do script serão salvos
-DIR_OUTPUT = 'data'
+DIR_OUTPUT = '.'
 ARQ_SOM = os.path.join(DIR_OUTPUT,'SOM.graphml')
 ARQ_CLASSES_SOM = os.path.join(DIR_OUTPUT, 'classesSOM.csv')
 
@@ -103,7 +104,9 @@ def main(log):
     elements, attrNames = carregaArquivo(ARQ_IN, idAttrs=ID_ATTRS,
             valueAttrs=VALUE_ATTRS)
 
-    criaSOM(log, elements, attrNames)
+    classes, erros, silh = criaSOM(log, elements, attrNames)
+
+    writeClassificationCSV(classes,erros,silh)
 
 #---------------------------------------------------------------------
 # Definição das funções auxiliares e procedimentos macro do script
@@ -130,18 +133,19 @@ def carregaArquivo(fileName, idAttrs=[], valueAttrs=[]):
                     valueCols.add(n)
                     attrNames.append(c)
         else:
-            id = [elemNum]
+            idList = [elemNum]
             vet = []
             for n, v in enumerate(campos):
                 if n in idCols:
-                    id.append(v)
+                    idList.append(v)
                 elif n in valueCols:
                     vet.append(float(v))
-            elements[tuple(id)] = vet
+            elements[tuple(idList)] = vet
 
         elemNum += 1
 
     return elements, attrNames
+
 
 def criaSOM(log, elements, attrNames):
     som = somV.SOMap('SOM')
@@ -155,13 +159,47 @@ def criaSOM(log, elements, attrNames):
         )
     else:
         som.trainGrowingTree()
+    log.info('...ok')
 
+    log.info('Classificando elementos...')
+    classes, quantErr = som.classifyMapOfElements(elements)
+    log.info('...ok')
+
+    log.info('Calculando silhouette indices...')
+    elemSilh, clusSilh, totalSilh = silhou.evaluateClusters(
+            elements, classes)
     log.info('...ok')
 
     # Salvando o som de nodos
+    log.info('Salvando SOM...')
     gsom = somV.convertSOMapToMultiGraph(som,
             attrNames=attrNames, nodeIDAttr='ID')
+
+    spec = gr.AttrSpec('Total silhouette','double')
+    gsom.addGraphAttrSpec(spec)
+    gsom.setGraphAttr(spec.name, totalSilh)
+
+    gsom.setNodeAttrFromDict('Node silhouette', clusSilh,
+            attrType='double', default=0)
+
     gsom.writeGraphml(ARQ_SOM)
+    log.info('...ok')
+
+    return classes, quantErr, elemSilh
+
+def writeClassificationCSV(classes, quantErr, elemSilh):
+
+    if ARQ_CLASSES_SOM is None or ARQ_CLASSES_SOM == '':
+        return
+
+    with open(ARQ_CLASSES_SOM, 'w', newline='') as f:
+        csvWriter = csv.writer(f, **CSV_OPTIONS)
+        csvWriter.writerow(['#'] + ID_ATTRS +
+                ['classe som','erro de quantizacao','silhouette'])
+        for ids in sorted(classes.keys()):
+            row = list(ids) + [classes[ids], quantErr[ids], elemSilh[ids]]
+            csvWriter.writerow(row)
+
 
 #---------------------------------------------------------------------
 # GUI
@@ -179,6 +217,9 @@ class ConfigGUI(tk.Frame):
         ARQ_IN = ''
 
         super().__init__(master, **options)
+
+        self.executar = False
+        self.master = master
 
         self.logger = logger
 
@@ -221,10 +262,15 @@ class ConfigGUI(tk.Frame):
 
     def doBtGerarSOM(self):
         global ARQ_SOM
+        global ARQ_CLASSES_SOM
 
         fileName = filedialog.asksaveasfilename(
             title='Arquivo para salvar o SOM',
             filetypes=[('graphml','*.graphml')], defaultextension='.graphml')
+
+        ARQ_CLASSES_SOM = filedialog.asksaveasfilename(
+            title='Arquivo para salvar a atribuição de classes',
+            filetypes=[('CSV','*.csv')], defaultextension='.csv')
 
         if fileName != '':
             ARQ_SOM = fileName
@@ -234,10 +280,10 @@ class ConfigGUI(tk.Frame):
                 'A janela de configuração irá se fechar. Acompanhe o treinamento\n' +
                 'pelo terminal.'):
 
+                self.executar = True
+
                 # Destruindo a GUI.
-                w = self.winfo_toplevel()
-                self.after_idle(w.quit)
-                w.destroy()
+                self.master.quit()
 
     def doBtValues(self):
         global VALUE_ATTRS
@@ -272,8 +318,6 @@ class ConfigGUI(tk.Frame):
                 for campos in csvReader:
                     self.headers = campos
                     break
-
-            print(self.headers)
 
 
 class SOMConfDialog(Dialog):
@@ -381,8 +425,12 @@ if __name__ == '__main__':
     logging.config.dictConfig(LOG_CONFIG)
     logger = logging.getLogger()
     app = tk.Tk()
-    a = ConfigGUI(app, logger)
-    a.pack(expand=True, fill='both')
+    confGui = ConfigGUI(app, logger)
+    confGui.pack(expand=True, fill='both')
     app.mainloop()
-    logger.info("Iniciando processamento...")
-    main(logger)
+
+    if confGui.executar:
+        logger.info("Iniciando processamento...")
+        main(logger)
+    else:
+        logger.info("Processamento abortado.")
