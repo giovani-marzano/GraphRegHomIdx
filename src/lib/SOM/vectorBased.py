@@ -136,8 +136,18 @@ class SOMNode(AbstractSOMNode):
         if self._numElem <= 1:
             return [0 for x in self.refElem]
 
-        return [ math.sqrt((s2 - (s*s)/self._numElem)/self._numElem)
-                    for s, s2 in zip(self._sumVect, self._sumSqVect)]
+        ret = []
+        for s, s2 in zip(self._sumVect, self._sumSqVect):
+            x = (s2 - (s*s)/self._numElem)/self._numElem
+            # Erros de arrendondamento podem tornar x um número negativo proximo
+            # de zero, o que faz math.sqrt falhar.
+            if x < 0.0:
+                print("WARN: Valor negativo! {0}".format(x))
+                ret.append(0.0)
+            else:
+                ret.append(math.sqrt(x))
+
+        return ret
 
     def getMinVect(self):
         return self._minVect
