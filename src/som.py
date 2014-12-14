@@ -70,7 +70,7 @@ SOM_CONFIG = {
 }
 
 # Configurações para controlar a geração de log pelo script
-ARQ_LOG = os.path.join(DIR_OUTPUT,'log.txt')
+ARQ_LOG = 'som.log'
 LOG_CONFIG = {
     'version': 1,
     'formatters': {
@@ -87,9 +87,16 @@ LOG_CONFIG = {
             'level': 'INFO',
             'formatter': 'brief'
         },
+        'arquivo': {
+            'class': 'logging.FileHandler',
+            'level': 'DEBUG',
+            'formatter': 'detail',
+            'filename': ARQ_LOG,
+            'mode': 'w'
+        }
     },
     'root': {
-        'handlers': ['console'],
+        'handlers': ['console', 'arquivo'],
         'level': 'DEBUG'
     }
 }
@@ -166,7 +173,7 @@ def criaSOM(log, elements, attrNames):
     log.info('...ok')
 
     log.info('Calculando silhouette indices...')
-    elemSilh, clusSilh, totalSilh = silhou.evaluateClusters(
+    elemSilh, clusSilh, totalSilh = silhou.evaluateClusters2(
             elements, classes)
     log.info('...ok')
 
@@ -284,6 +291,7 @@ class ConfigGUI(tk.Frame):
 
                 # Destruindo a GUI.
                 self.master.quit()
+                self.master.destroy()
 
     def doBtValues(self):
         global VALUE_ATTRS
