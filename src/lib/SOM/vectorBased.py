@@ -150,9 +150,15 @@ class SOMNode(AbstractSOMNode):
         return ret
 
     def getMinVect(self):
+        if self._numElem < 1:
+            return [0 for x in self.refElem]
+
         return self._minVect
 
     def getMaxVect(self):
+        if self._numElem < 1:
+            return [0 for x in self.refElem]
+
         return self._maxVect
 
 class SOMap(AbstractSOMap):
