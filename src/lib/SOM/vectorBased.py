@@ -44,6 +44,8 @@ class SOMNode(AbstractSOMNode):
 
         self._sumVect = [0.0 for x in self.refElem]
         self._sumSqVect = [0.0 for x in self.refElem]
+        self._minVect = [float('inf') for x in self.refElem]
+        self._maxVect = [float('-inf') for x in self.refElem]
         self._numElem = 0
         self._closestElem = None
         self._closestNonZeroDistSq = None
@@ -74,6 +76,10 @@ class SOMNode(AbstractSOMNode):
         for i in range(len(elem)):
             self._sumVect[i] += elem[i]
             self._sumSqVect[i] += elem[i]*elem[i]
+            if elem[i] < self._minVect[i]:
+                self._minVect[i] = elem[i]
+            if elem[i] > self._maxVect[i]:
+                self._maxVect[i] = elem[i]
 
         self._numElem += 1
 
@@ -132,6 +138,12 @@ class SOMNode(AbstractSOMNode):
 
         return [ math.sqrt((s2 - (s*s)/self._numElem)/self._numElem)
                     for s, s2 in zip(self._sumVect, self._sumSqVect)]
+
+    def getMinVect(self):
+        return self._minVect
+
+    def getMaxVect(self):
+        return self._maxVect
 
 class SOMap(AbstractSOMap):
     """Um mapa auto organizável que opera sobre vetores numéricos.
@@ -266,6 +278,8 @@ def convertSOMapToMultiGraph(som, attrNames=[], nodeIDAttr='ID'):
     meanSpecs = []
     stdevSpecs = []
     refSpecs = []
+    minSpecs = []
+    maxSpecs = []
     for attr in attrNames:
         spec = gr.AttrSpec(attr+'_mean', 'double', 0)
         meanSpecs.append(spec)
@@ -275,6 +289,12 @@ def convertSOMapToMultiGraph(som, attrNames=[], nodeIDAttr='ID'):
         g.addNodeAttrSpec(spec)
         spec = gr.AttrSpec(attr+'_ref', 'double', 0)
         refSpecs.append(spec)
+        g.addNodeAttrSpec(spec)
+        spec = gr.AttrSpec(attr+'_min', 'double', 0)
+        minSpecs.append(spec)
+        g.addNodeAttrSpec(spec)
+        spec = gr.AttrSpec(attr+'_max', 'double', 0)
+        maxSpecs.append(spec)
         g.addNodeAttrSpec(spec)
 
     numElemSpec = gr.AttrSpec('numElem', 'int', 0)
@@ -308,10 +328,14 @@ def convertSOMapToMultiGraph(som, attrNames=[], nodeIDAttr='ID'):
         g.setNodeAttr(n, idSpec.name, n)
         mean = node.getMeanElement()
         stdev = node.getStdevVect()
+        minVect = node.getMinVect()
+        maxVect = node.getMaxVect()
         for i in range(dimension):
             g.setNodeAttr(n, refSpecs[i].name, node.refElem[i])
             g.setNodeAttr(n, meanSpecs[i].name, mean[i])
             g.setNodeAttr(n, stdevSpecs[i].name, stdev[i])
+            g.setNodeAttr(n, minSpecs[i].name, minVect[i])
+            g.setNodeAttr(n, maxSpecs[i].name, maxVect[i])
 
     for n1 in som.nodes:
         n1id = n1.getID()
