@@ -33,6 +33,7 @@ def evaluateClusters(elemValues, elemClusters, dissFun=eucliDist):
 
 
     silhouette = {e: 0.0 for e in elemClusters.keys()}
+    neighboor = dict(elemClusters)
     clusterSilhouette = {c: 0.0 for c in clusterCount.keys()}
 
     for e, c in elemClusters.items():
@@ -58,6 +59,7 @@ def evaluateClusters(elemValues, elemClusters, dissFun=eucliDist):
                 b = diss/clusterCount[cj]
                 if b < bmin:
                     bmin = b
+                    neighboor[e] = cj
 
         s = calcCoeficiente(a, bmin)
         silhouette[e] = s
@@ -78,7 +80,7 @@ def evaluateClusters(elemValues, elemClusters, dissFun=eucliDist):
     if numElem > 0:
         totalSilhouette = totalSilhouette/numElem
 
-    return silhouette, clusterSilhouette, totalSilhouette
+    return silhouette, clusterSilhouette, totalSilhouette, neighboor
 
 def evaluateClusters2(elemValues, elemClusters):
     """
@@ -115,6 +117,7 @@ def evaluateClusters2(elemValues, elemClusters):
             clustData[c][ISUMSQ][i] += v*v
 
     silhouette = {e: 0.0 for e in elemClusters.keys()}
+    neighboor = dict(elemClusters)
     clusterSilhouette = {c: 0.0 for c in clustData.keys()}
 
     for e, c in elemClusters.items():
@@ -143,6 +146,7 @@ def evaluateClusters2(elemValues, elemClusters):
                 b = x/cjData[ICOUNT]
                 if b < bmin:
                     bmin = b
+                    neighboor[e] = cj
 
         s = calcCoeficiente(a, bmin)
         silhouette[e] = s
@@ -164,5 +168,5 @@ def evaluateClusters2(elemValues, elemClusters):
     if numElem > 0:
         totalSilhouette = totalSilhouette/numElem
 
-    return silhouette, clusterSilhouette, totalSilhouette
+    return silhouette, clusterSilhouette, totalSilhouette, neighboor
 

@@ -62,7 +62,7 @@ class PreCalculated(unittest.TestCase):
 
     def test_evaluateClusters(self):
         for c12n, (clusters, expected) in enumerate(self.clusterizations):
-            se, sc, st = silhouette.evaluateClusters(self.values, clusters)
+            se, sc, st, nei = silhouette.evaluateClusters(self.values, clusters)
 
             for e, s in se.items():
                 self.assertAlmostEqual(s, expected[e],
@@ -136,7 +136,7 @@ class PreCalculated2(unittest.TestCase):
 
     def test_evaluateClusters(self):
         for c12n, (clusters, expected) in enumerate(self.clusterizations):
-            se, sc, st = silhouette.evaluateClusters2(self.values, clusters)
+            se, sc, st, nei = silhouette.evaluateClusters2(self.values, clusters)
 
             for e, s in se.items():
                 self.assertAlmostEqual(s, expected[e],
