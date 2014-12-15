@@ -111,9 +111,9 @@ def main(log):
     elements, attrNames = carregaArquivo(ARQ_IN, idAttrs=ID_ATTRS,
             valueAttrs=VALUE_ATTRS)
 
-    classes, erros, silh = criaSOM(log, elements, attrNames)
+    classes, erros, silh, neighClust = criaSOM(log, elements, attrNames)
 
-    writeClassificationCSV(classes,erros,silh)
+    writeClassificationCSV(classes,erros,silh, neighClust)
 
 #---------------------------------------------------------------------
 # Definição das funções auxiliares e procedimentos macro do script
@@ -173,7 +173,7 @@ def criaSOM(log, elements, attrNames):
     log.info('...ok')
 
     log.info('Calculando silhouette indices...')
-    elemSilh, clusSilh, totalSilh = silhou.evaluateClusters2(
+    elemSilh, clusSilh, totalSilh, neighClust = silhou.evaluateClusters2(
             elements, classes)
     log.info('...ok')
 
@@ -192,9 +192,9 @@ def criaSOM(log, elements, attrNames):
     gsom.writeGraphml(ARQ_SOM)
     log.info('...ok')
 
-    return classes, quantErr, elemSilh
+    return classes, quantErr, elemSilh, neighClust
 
-def writeClassificationCSV(classes, quantErr, elemSilh):
+def writeClassificationCSV(classes, quantErr, elemSilh, neighboor):
 
     if ARQ_CLASSES_SOM is None or ARQ_CLASSES_SOM == '':
         return
@@ -202,9 +202,11 @@ def writeClassificationCSV(classes, quantErr, elemSilh):
     with open(ARQ_CLASSES_SOM, 'w', newline='') as f:
         csvWriter = csv.writer(f, **CSV_OPTIONS)
         csvWriter.writerow(['#'] + ID_ATTRS +
-                ['classe som','erro de quantizacao','silhouette'])
+                ['classe_som','erro_de_quantizacao','silhouette','cluster_vizinho'])
         for ids in sorted(classes.keys()):
-            row = list(ids) + [classes[ids], quantErr[ids], elemSilh[ids]]
+            row = list(ids) + [
+                classes[ids], quantErr[ids], elemSilh[ids], neighboor[ids]
+                ]
             csvWriter.writerow(row)
 
 
@@ -215,7 +217,10 @@ from tkinter.simpledialog import Dialog
 import tkinter as tk
 import tkinter.filedialog as filedialog
 import tkinter.messagebox as messagebox
+import tkinter.ttk as ttk
 import gui
+from queue import Queue, Empty
+import threading
 
 class ConfigGUI(tk.Frame):
     def __init__(self, master, logger, **options):
@@ -289,9 +294,7 @@ class ConfigGUI(tk.Frame):
 
                 self.executar = True
 
-                # Destruindo a GUI.
-                self.master.quit()
-                self.master.destroy()
+                execDial = ExecutionDialog(self, self.logger)
 
     def doBtValues(self):
         global VALUE_ATTRS
@@ -326,7 +329,52 @@ class ConfigGUI(tk.Frame):
                 for campos in csvReader:
                     self.headers = campos
                     break
+                    
+class ExecutionDialog(Dialog):
+    def __init__(self, master, logger):
 
+        self.logger = logger
+        self.queue = Queue()
+        self.master = master
+
+        t = threading.Thread(target=self.execThread)
+        t.start()
+        master.after(1000, self.periodicPool)
+
+        super().__init__(master,title='TESTE')
+
+    def execThread(self):
+        main(self.logger)
+        self.queue.put(('END',))
+        print('FIM MAIN')
+
+    def periodicPool(self):
+        msg = None
+        cont = True
+        try:
+            msg = self.queue.get(False)
+            print('pegou msg', msg)
+        except Empty:
+            pass
+
+        if msg is not None:
+            if msg[0] == 'END':
+                cont = False
+
+        if cont:
+            self.master.after(1000, self.periodicPool)
+        else:
+            print('Tentando fechar')
+            self.ok()
+
+    def body(self, master):
+        p = ttk.Progressbar(master, orient=tk.HORIZONTAL, mode='indeterminate')
+        p.pack()
+        p.start()
+        master.pack()
+
+    def buttonbox(self):
+        pass
 
 class SOMConfDialog(Dialog):
     def __init__(self, master):
@@ -436,9 +484,3 @@ if __name__ == '__main__':
     confGui = ConfigGUI(app, logger)
     confGui.pack(expand=True, fill='both')
     app.mainloop()
-
-    if confGui.executar:
-        logger.info("Iniciando processamento...")
-        main(logger)
-    else:
-        logger.info("Processamento abortado.")
