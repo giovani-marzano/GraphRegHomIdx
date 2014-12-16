@@ -16,10 +16,14 @@ def eucliDist(v1, v2):
     return math.sqrt(dist)
 
 def calcCoeficiente(a,b):
-    return (b - a)/max(a,b)
+    den = max(a,b)
+    if den == 0:
+        return 0.0
+    else:
+        return (b - a)/max(a,b)
 
 def evaluateClusters(elemValues, elemClusters, dissFun=eucliDist):
-    """ 
+    """
     """
 
     clusterCount = {}
