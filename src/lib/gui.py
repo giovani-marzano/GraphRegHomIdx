@@ -6,7 +6,7 @@ import re
 class ListSelecOneFrame(ttk.Frame):
     def __init__(self, master, filterText='', **options):
         super().__init__(master, **options)
-        
+
         self._filter = ''
         self._filterText = tk.StringVar(self, value=filterText)
         filterFrame = self._createFilterFrame()
@@ -107,7 +107,7 @@ class ListSelecManyFrame(ttk.Frame):
     def __init__(self, master, filterText='',
             selectmode=tk.BROWSE, **options):
         super().__init__(master, **options)
-        
+
         self._filter = ''
         self._filterText = tk.StringVar(self, value=filterText)
         filterFrame = self._createFilterFrame()
@@ -226,10 +226,14 @@ class ListSelecManyFrame(ttk.Frame):
 
         self._updateList()
 
-    def setItems(self, items):
+    def setItems(self, items, selected=[]):
         self._items = items
         self._itemsFilter = [True for i in items]
         self._itemsSelected = [False for i in items]
+        for i, item in enumerate(items):
+            if item in selected:
+                self._itemsSelected = True
+
         self._applyFilter()
 
     def getItems(self):
