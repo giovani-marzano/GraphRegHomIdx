@@ -1,7 +1,10 @@
 import tkinter as tk
 import tkinter.ttk as ttk
 from tkinter.simpledialog import Dialog
+import tkinter.messagebox as messagebox
 import re
+from queue import Queue, Empty
+import threading
 
 class ListSelecOneFrame(ttk.Frame):
     def __init__(self, master, filterText='', **options):
@@ -232,7 +235,7 @@ class ListSelecManyFrame(ttk.Frame):
         self._itemsSelected = [False for i in items]
         for i, item in enumerate(items):
             if item in selected:
-                self._itemsSelected = True
+                self._itemsSelected[i] = True
 
         self._applyFilter()
 
@@ -299,25 +302,30 @@ class ListSelectionDialog(Dialog):
     def apply(self):
         self.result = self._selFrame.getSelection()
 
+
 class ListSelecManyDialog(Dialog):
     """Dialog that permits the user to select many items from a list.
     """
     def __init__(self, parent, title=None,
-            text='', items=[], filterText=''):
+            text='', items=[], selected=[], filterText=''):
 
         self._text = text
         self._items = items
+        self._selected = selected
         self._filterText = filterText
         self.result = []
 
         super().__init__(parent, title)
 
     def body(self, master):
+        label = tk.Label(master, text=self._text)
+        label.pack(side='top')
+
         self._selFrame = ListSelecManyFrame(master,
                 filterText=self._filterText)
 
-        self._selFrame.setItems(self._items)
-        self._selFrame.pack(side='top', expand=True, fill='both')
+        self._selFrame.setItems(self._items, self._selected)
+        self._selFrame.pack(side='bottom', expand=True, fill='both')
 
         master.pack(expand=True, fill='both')
 
@@ -325,6 +333,70 @@ class ListSelecManyDialog(Dialog):
 
     def apply(self):
         self.result = self._selFrame.getSelection()
+
+
+class ExecutionDialog(object):
+    def __init__(self, master, command, title='Executando...'):
+
+        self.queue = Queue()
+        self.master = master
+        self.command = command
+
+        t = threading.Thread(target=self.execThread)
+
+        self.window = tk.Toplevel(master)
+        self.window.title(title)
+        self.window.transient(master)
+        self.window.grab_set()
+        self.window.focus_set()
+        self.window.protocol('WM_DELETE_WINDOW', self.closeCallback)
+
+        p = ttk.Progressbar(self.window, orient=tk.HORIZONTAL, mode='indeterminate')
+        p.pack(expand=True, fill='both')
+        p.start()
+
+        t.start()
+        master.after(1000, self.periodicPool)
+        master.wait_window(self.window)
+
+    def closeDialog(self, result=('END',)):
+
+        if result[0] == 'END':
+            messagebox.showinfo('Info','Operação concluida.');
+        elif result[0] == 'ERROR':
+            messagebox.showerror('Erro',
+                'Ocorreu um erro durante a execução:\n\n{0}'.format(result[1]))
+
+        self.master.focus_set()
+        self.window.destroy()
+
+    def closeCallback(self):
+        pass
+
+    def execThread(self):
+        try:
+            self.command()
+            self.queue.put(('END',))
+        except Exception as ex:
+            self.queue.put(('ERROR',str(ex)))
+            raise ex
+
+    def periodicPool(self):
+        msg = None
+        cont = True
+        try:
+            msg = self.queue.get(False)
+        except Empty:
+            pass
+
+        if msg is not None:
+            cont = False
+
+        if cont:
+            self.master.after(1000, self.periodicPool)
+        else:
+            self.closeDialog(msg)
+
 
 if __name__ == '__main__':
     app = tk.Tk()

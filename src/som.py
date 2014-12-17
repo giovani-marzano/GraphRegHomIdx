@@ -22,52 +22,12 @@ sys.path.append(os.path.join(sys.path[0],'lib'))
 
 import graph as gr
 import SOM.vectorBased as somV
+import SOM
 import silhouette as silhou
-
-if sys.version_info.major < 3:
-    import codecs
-    def u(x):
-        return codecs.unicode_escape_decode(x)[0]
-else:
-    def u(x):
-        return x
 
 #---------------------------------------------------------------------
 # Variaveis globais de configuração
 #---------------------------------------------------------------------
-
-# Variavéis que controlam de onde os dados de entrada serão lidos
-DIR_INPUT = '.'
-ARQ_IN = os.path.join(DIR_INPUT,'teste.csv')
-
-# Configuracao de que colunas do arquivo csv que serao utilizadas
-# Nome das colunas de identificacao
-ID_ATTRS = ['um']
-# Nome das colunas de valores
-VALUE_ATTRS = ['dois','tres','quatro']
-
-# Configuraçoes do formato do arquivo CSV
-CSV_OPTIONS = {
-    'delimiter': ','
-}
-
-# Variáveis que controlam onde os dados de saida do script serão salvos
-DIR_OUTPUT = '.'
-ARQ_SOM = os.path.join(DIR_OUTPUT,'SOM.graphml')
-ARQ_CLASSES_SOM = os.path.join(DIR_OUTPUT, 'classesSOM.csv')
-
-# Configurações para controlar o algoritmo SOM
-SOM_CONFIG = {
-    'Tipo': 'grid', # Pode ser 'grid' ou 'tree'
-    'FVU': 0.2,
-    'maxNodes': 3, #para TREE
-    'neighWeightTrain': 0.25,
-    'neighWeightRefine': 0.25,
-    'maxStepsPerGeneration': 100,
-    'MSTPeriod': 10,
-    'nrows': 5, #numero de linhas
-    'ncols': 4  #numero de colunas
-}
 
 # Configurações para controlar a geração de log pelo script
 ARQ_LOG = 'som.log'
@@ -102,113 +62,179 @@ LOG_CONFIG = {
 }
 
 #---------------------------------------------------------------------
-# Função principal do script
+# Classe de controle do aplicativo
 #---------------------------------------------------------------------
-def main(log):
-    """Função principal do script, executada no final do arquivo.
+class SOMAppControl(object):
+    """Classe que controla o caso de uso do aplicativo.
+
+    Atributos configuráveis:
+
+    - fileNameData: Nome do arquivo CSV com os dados a serem processados.
+
+    - idAttrs: Lista com os nomes dos atributos que identificam os elementos.
+
+    - valueAttrs: Lista com os nomes dos atributos de valor dos elementos.
+
+    - fileNameSOM: Nome do arquivo graphml no qual o SOM será salvo.
+
+    - fileNameClusAssoc: Nome do arquivo CSV onde será salva a associação de
+      cada elemento ao nodo do SOM a que ele foi atribuído.
     """
-    log.info('Carregando {}...'.format(ARQ_IN))
-    elements, attrNames = carregaArquivo(ARQ_IN, idAttrs=ID_ATTRS,
-            valueAttrs=VALUE_ATTRS)
 
-    classes, erros, silh, neighClust = criaSOM(log, elements, attrNames)
+    def __init__(self, logger):
+        """
+        Args:
 
-    writeClassificationCSV(classes,erros,silh, neighClust)
+        - logger: Objeto usado para gerar mensagens de log
+        """
+        self.logger = logger
 
-#---------------------------------------------------------------------
-# Definição das funções auxiliares e procedimentos macro do script
-#---------------------------------------------------------------------
+        self.fileNameSOM = ''
+        self.fileNameClusAssoc = ''
+        self.clearDataFile()
 
-def carregaArquivo(fileName, idAttrs=[], valueAttrs=[]):
+        # Tipo de SOM, pode ser 'tree' ou 'grid'
+        self.SOMConf = {
+            'Tipo': 'tree',
+            'FVU': SOM.Config.FVU_DFLT,
+            'maxNodes': SOM.Config.MAX_NODES_DFLT, #para TREE
+            'neighWeightTrain': SOM.Config.NEIGH_WEIGHT_TRAIN_DFLT,
+            'neighWeightRefine': SOM.Config.NEIGH_WEIGHT_REFINE_DFLT,
+            'maxStepsPerGeneration': SOM.Config.MAX_STEPS_PER_GENERATION_DFLT,
+            'MSTPeriod': SOM.Config.MST_PERIOD_DFLT,
+            'nrows': 5, #numero de linhas
+            'ncols': 4  #numero de colunas
+        }
 
-    csvReader = csv.reader(open(fileName, newline=''), **CSV_OPTIONS)
+    def clearDataFile(self):
+        self.fileNameData = ''
+        self.idAttrs = []
+        self.valueAttrs = []
+        self.attrNames = []
+        self.csvDialect = None
 
-    elements = {}
-    idCols = set()
-    valueCols = set()
-    attrNames = []
+    def openDataFile(self,fileName):
+        self.clearDataFile()
 
-    elemNum = 0
-    for campos in csvReader:
-        if elemNum == 0:
-            # Estamos lendo a primeira linha que possui o cabecalho
-            cabecalho = campos
-            for n, c in enumerate(campos):
-                if c in idAttrs:
-                    idCols.add(n)
-                elif c in valueAttrs:
-                    valueCols.add(n)
-                    attrNames.append(c)
+        f = open(fileName, newline='')
+        self.csvDialect = csv.Sniffer().sniff(f.read(1024))
+        f.seek(0)
+        self.fileNameData = fileName
+
+        # Le a primeira linha para recuperar os nomes dos atributos
+        reader = csv.reader(f, self.csvDialect)
+        for row in reader:
+            self.attrNames = row
+            break
+
+        f.close()
+
+    def setIdAttrs(self, attrs):
+        self.idAttrs = [ x for x in attrs if x in self.attrNames ]
+
+    def setValueAttrs(self, attrs):
+        self.valueAttrs = [ x for x in attrs if x in self.attrNames ]
+
+    def _carregaDados(self):
+        self.logger.info('Carregando {}...'.format(self.fileNameData))
+        with open(self.fileNameData, newline='') as f:
+            csvReader = csv.reader(f, self.csvDialect)
+
+            elements = {}
+            idCols = set()
+            valueCols = set()
+            attrNames = []
+
+            elemNum = 0
+            for campos in csvReader:
+                if elemNum == 0:
+                    # Estamos lendo a primeira linha que possui o cabecalho
+                    cabecalho = campos
+                    for n, c in enumerate(campos):
+                        if c in self.idAttrs:
+                            idCols.add(n)
+                        elif c in self.valueAttrs:
+                            valueCols.add(n)
+                            attrNames.append(c)
+                else:
+                    idList = [elemNum]
+                    vet = []
+                    for n, v in enumerate(campos):
+                        if n in idCols:
+                            idList.append(v)
+                        elif n in valueCols:
+                            vet.append(float(v))
+                    elements[tuple(idList)] = vet
+
+                elemNum += 1
+        self.logger.info('...ok')
+
+        return elements, attrNames
+
+    def _criaSOM(self, elements, attrNames):
+        som = somV.SOMap('SOM')
+        som.conf.dictConfig(self.SOMConf)
+        som.elements = list(elements.values())
+        self.logger.info('Treinando SOM...')
+        if self.SOMConf['Tipo'] == 'grid':
+            som.trainHexGrid(
+                self.SOMConf.get('nrows', 5),
+                self.SOMConf.get('ncols', 4)
+            )
         else:
-            idList = [elemNum]
-            vet = []
-            for n, v in enumerate(campos):
-                if n in idCols:
-                    idList.append(v)
-                elif n in valueCols:
-                    vet.append(float(v))
-            elements[tuple(idList)] = vet
+            som.trainGrowingTree()
+        self.logger.info('...ok')
 
-        elemNum += 1
+        self.logger.info('Classificando elementos...')
+        classes, quantErr = som.classifyMapOfElements(elements)
+        self.logger.info('...ok')
 
-    return elements, attrNames
+        self.logger.info('Calculando silhouette indices...')
+        elemSilh, clusSilh, totalSilh, neighClust = silhou.evaluateClusters2(
+                elements, classes)
+        self.logger.info('...ok')
 
+        # Salvando o som de nodos
+        if self.fileNameSOM != '' and self.fileNameSOM is not None:
+            self.logger.info('Salvando SOM...')
+            gsom = somV.convertSOMapToMultiGraph(som,
+                    attrNames=attrNames, nodeIDAttr='ID')
 
-def criaSOM(log, elements, attrNames):
-    som = somV.SOMap('SOM')
-    som.conf.dictConfig(SOM_CONFIG)
-    som.elements = list(elements.values())
-    log.info('Treinando SOM...')
-    if SOM_CONFIG['Tipo'] == 'grid':
-        som.trainHexGrid(
-            SOM_CONFIG.get('nrows', 5),
-            SOM_CONFIG.get('ncols', 4)
-        )
-    else:
-        som.trainGrowingTree()
-    log.info('...ok')
+            spec = gr.AttrSpec('Total silhouette','double')
+            gsom.addGraphAttrSpec(spec)
+            gsom.setGraphAttr(spec.name, totalSilh)
 
-    log.info('Classificando elementos...')
-    classes, quantErr = som.classifyMapOfElements(elements)
-    log.info('...ok')
+            gsom.setNodeAttrFromDict('Node silhouette', clusSilh,
+                    attrType='double', default=0)
 
-    log.info('Calculando silhouette indices...')
-    elemSilh, clusSilh, totalSilh, neighClust = silhou.evaluateClusters2(
-            elements, classes)
-    log.info('...ok')
+            gsom.writeGraphml(self.fileNameSOM)
+            self.logger.info('...ok')
 
-    # Salvando o som de nodos
-    log.info('Salvando SOM...')
-    gsom = somV.convertSOMapToMultiGraph(som,
-            attrNames=attrNames, nodeIDAttr='ID')
+        return classes, quantErr, elemSilh, neighClust
 
-    spec = gr.AttrSpec('Total silhouette','double')
-    gsom.addGraphAttrSpec(spec)
-    gsom.setGraphAttr(spec.name, totalSilh)
+    def _writeClassificationCSV(self, classes, quantErr, elemSilh, neighboor):
 
-    gsom.setNodeAttrFromDict('Node silhouette', clusSilh,
-            attrType='double', default=0)
+        if self.fileNameClusAssoc is None or self.fileNameClusAssoc == '':
+            return
 
-    gsom.writeGraphml(ARQ_SOM)
-    log.info('...ok')
+        with open(self.fileNameClusAssoc, 'w', newline='') as f:
+            csvWriter = csv.writer(f, self.csvDialect)
+            csvWriter.writerow(['#'] + self.idAttrs +
+                    ['classe_som','erro_de_quantizacao','silhouette','cluster_vizinho'])
+            for ids in sorted(classes.keys()):
+                row = list(ids) + [
+                    classes[ids], quantErr[ids], elemSilh[ids], neighboor[ids]
+                    ]
+                csvWriter.writerow(row)
 
-    return classes, quantErr, elemSilh, neighClust
+    def processData(self):
+        """Função principal do script, executada no final do arquivo.
+        """
+        elements, attrNames = self._carregaDados()
 
-def writeClassificationCSV(classes, quantErr, elemSilh, neighboor):
+        classes, erros, silh, neighClust = self._criaSOM(elements, attrNames)
 
-    if ARQ_CLASSES_SOM is None or ARQ_CLASSES_SOM == '':
-        return
-
-    with open(ARQ_CLASSES_SOM, 'w', newline='') as f:
-        csvWriter = csv.writer(f, **CSV_OPTIONS)
-        csvWriter.writerow(['#'] + ID_ATTRS +
-                ['classe_som','erro_de_quantizacao','silhouette','cluster_vizinho'])
-        for ids in sorted(classes.keys()):
-            row = list(ids) + [
-                classes[ids], quantErr[ids], elemSilh[ids], neighboor[ids]
-                ]
-            csvWriter.writerow(row)
-
+        self._writeClassificationCSV(classes,erros,silh, neighClust)
 
 #---------------------------------------------------------------------
 # GUI
@@ -219,8 +245,6 @@ import tkinter.filedialog as filedialog
 import tkinter.messagebox as messagebox
 import tkinter.ttk as ttk
 import gui
-from queue import Queue, Empty
-import threading
 
 class ConfigGUI(tk.Frame):
     def __init__(self, master, logger, **options):
@@ -234,150 +258,158 @@ class ConfigGUI(tk.Frame):
         self.master = master
 
         self.logger = logger
+        self.control = SOMAppControl(logger)
 
+        row = 0
+
+        # Arquivo de entrada
         self.arqIn = tk.StringVar()
-        self.arqIn.set(ARQ_IN)
-        frArqIn = tk.Frame(self)
-        lbArqIn = tk.Label(frArqIn, text="Arquivo de entrada:")
-        lbArqInFile = tk.Label(frArqIn, textvariable=self.arqIn)
-        frArqIn.rowconfigure(0, weight=1)
-        frArqIn.columnconfigure(1, weight=1)
-        lbArqIn.grid(row=0, column=0, sticky=tk.EW)
-        lbArqInFile.grid(row=0, column=1, sticky=tk.EW)
-        frArqIn.grid(row=0, column=0, sticky=tk.EW)
+        self.arqIn.set(self.control.fileNameData)
 
-        self.btArqIn = tk.Button(self, text='1: Selecionar o arquivo de entrada',
-            command=self.doBtArqIn)
-        self.btArqIn.grid(row=1, column=0, sticky=tk.EW)
+        label = tk.Label(self, text="Arquivo de entrada:")
+        entry = tk.Entry(self, textvariable=self.arqIn, state='readonly')
+        button = tk.Button(self, text='Abrir', command=self.do_btArqIn)
 
-        # Lista com os cabeçalhos dos dados
-        self.headers = []
+        label.grid(row=row, column=0, sticky=tk.EW)
+        entry.grid(row=row, column=1, sticky=tk.EW)
+        button.grid(row=row, column=2, sticky=tk.EW)
 
-        self.btIds = tk.Button(self, text='2: Selecionar atributos de identificação',
-            command=self.doBtIds)
-        self.btIds.grid(row=2, column=0, sticky=tk.EW)
+        row += 1
 
-        self.btValues = tk.Button(self, text='3: Selecionar atributos de valor',
-            command=self.doBtValues)
-        self.btValues.grid(row=3, column=0, sticky=tk.EW)
+        # Lista de atributos de Identificação
+        self.idAttrList = tk.StringVar()
+        self.idAttrList.set(str(self.control.idAttrs))
 
-        self.btConfSOM = tk.Button(self, text='4: Configurar SOM',
-            command=self.doBtConfSOM)
-        self.btConfSOM.grid(row=4, column=0, sticky=tk.EW)
+        label = tk.Label(self, text="Atributos de\nIdentificação:")
+        entry = tk.Entry(self, textvariable=self.idAttrList, state='readonly')
+        self.btIds = tk.Button(self, text='Selecionar', command=self.do_btIds)
 
-        self.btGerarSOM = tk.Button(self, text='5: Gerar e salvar SOM',
-            command=self.doBtGerarSOM)
-        self.btGerarSOM.grid(row=5, column=0, sticky=tk.EW)
+        label.grid(row=row, column=0, sticky=tk.EW)
+        entry.grid(row=row, column=1, sticky=tk.EW)
+        self.btIds.grid(row=row, column=2, sticky=tk.EW)
 
-    def doBtConfSOM(self):
-        confDialog = SOMConfDialog(self)
+        row += 1
 
-    def doBtGerarSOM(self):
-        global ARQ_SOM
-        global ARQ_CLASSES_SOM
+        # Lista de atributos de Identificação
+        self.valAttrList = tk.StringVar()
+        self.valAttrList.set(str(self.control.valueAttrs))
 
+        label = tk.Label(self, text="Atributos de\nvalor:")
+        entry = tk.Entry(self, textvariable=self.valAttrList, state='readonly')
+        self.btValues = tk.Button(self, text='Selecionar',
+                command=self.do_btValues)
+
+        label.grid(row=row, column=0, sticky=tk.EW)
+        entry.grid(row=row, column=1, sticky=tk.EW)
+        self.btValues.grid(row=row, column=2, sticky=tk.EW)
+
+        row += 1
+
+        # Configurações do SOM
+        self.btConfSOM = tk.Button(self, text='Configuração do SOM...',
+            command=self.do_btConfSOM)
+        self.btConfSOM.grid(row=row, column=1)
+
+        row += 1
+
+        # Arquivo de saida do SOM
+        self.arqOutSOM = tk.StringVar()
+        self.arqOutSOM.set(self.control.fileNameSOM)
+
+        label = tk.Label(self, text="Arquivo de saída\npara o SOM:")
+        entry = tk.Entry(self, textvariable=self.arqOutSOM, state='readonly')
+        button = tk.Button(self, text='Selecionar', command=self.do_btArqOutSOM)
+
+        label.grid(row=row, column=0, sticky=tk.EW)
+        entry.grid(row=row, column=1, sticky=tk.EW)
+        button.grid(row=row, column=2, sticky=tk.EW)
+
+        row += 1
+
+        # Arquivo de saida para as associaçoes de cluster
+        self.arqOutClusAssoc = tk.StringVar()
+        self.arqOutClusAssoc.set(self.control.fileNameClusAssoc)
+
+        label = tk.Label(self, text="Arquivo de saída\npara o SOM:")
+        entry = tk.Entry(self, textvariable=self.arqOutClusAssoc, state='readonly')
+        button = tk.Button(self, text='Selecionar',
+            command=self.do_btArqOutClussAssoc)
+
+        label.grid(row=row, column=0, sticky=tk.EW)
+        entry.grid(row=row, column=1, sticky=tk.EW)
+        button.grid(row=row, column=2, sticky=tk.EW)
+
+        row += 1
+
+        # Botão de executar o processamento
+        self.btGerarSOM = tk.Button(self, text='Gerar e salvar SOM',
+            command=self.do_btGerarSOM)
+        self.btGerarSOM.grid(row=row, column=1)
+
+        row += 1
+
+        self.columnconfigure(1, weight=1)
+
+    def do_btConfSOM(self):
+        confDialog = SOMConfDialog(self, self.control.SOMConf)
+
+    def do_btValues(self):
+        attrSel = gui.ListSelecManyDialog(self, title="Seleção de atributos",
+                text="Selecione os atributos que possuem os dados a serem processados.",
+                items=self.control.attrNames, selected=self.control.valueAttrs)
+
+        if attrSel.result is not None:
+            attrs = [ x for n, x in attrSel.result ]
+            self.control.setValueAttrs(attrs)
+            self.valAttrList.set(str(self.control.valueAttrs))
+
+    def do_btIds(self):
+        attrSel = gui.ListSelecManyDialog(self, title="Seleção de atributos",
+                text="Selecione os atributos que identificam as amostras.",
+                items=self.control.attrNames, selected=self.control.idAttrs)
+
+        if attrSel.result is not None:
+            attrs = [ x for n, x in attrSel.result ]
+            self.control.setIdAttrs(attrs)
+            self.idAttrList.set(str(self.control.idAttrs))
+
+    def do_btArqIn(self):
+        fileName = filedialog.askopenfilename(filetypes=[('CSV','*.csv')])
+        if fileName != '':
+            self.control.openDataFile(fileName)
+            self.arqIn.set(self.control.fileNameData)
+            self.idAttrList.set(str(self.control.idAttrs))
+            self.valAttrList.set(str(self.control.valueAttrs))
+
+    def do_btArqOutSOM(self):
         fileName = filedialog.asksaveasfilename(
             title='Arquivo para salvar o SOM',
             filetypes=[('graphml','*.graphml')], defaultextension='.graphml')
+        self.control.fileNameSOM = fileName
+        self.arqOutSOM.set(fileName)
 
-        ARQ_CLASSES_SOM = filedialog.asksaveasfilename(
+    def do_btArqOutClussAssoc(self):
+        fileName = filedialog.asksaveasfilename(
             title='Arquivo para salvar a atribuição de classes',
             filetypes=[('CSV','*.csv')], defaultextension='.csv')
+        self.control.fileNameClusAssoc = fileName
+        self.arqOutClusAssoc.set(fileName)
 
-        if fileName != '':
-            ARQ_SOM = fileName
+    def do_btGerarSOM(self):
+        if messagebox.askokcancel('Confirmar execução',
+                'O programa irá realizar o treinamento do SOM.\n'+
+                'Isto pode levar algum tempo.\n\n' +
+                'Deseja continuar ?'):
 
-            if messagebox.askokcancel('Confirmar execução',
-                'O programa irá gerar o SOM no arquivo especificado.\n' +
-                'A janela de configuração irá se fechar. Acompanhe o treinamento\n' +
-                'pelo terminal.'):
+            execDial = gui.ExecutionDialog(self, command=self.control.processData,
+                title='Executando...')
 
-                self.executar = True
-
-                execDial = ExecutionDialog(self, self.logger)
-
-    def doBtValues(self):
-        global VALUE_ATTRS
-
-        attrSel = gui.ListSelecManyDialog(self, title="Seleção de atributos",
-                text="Selecione os atributos que possuem os dados a serem processados.",
-                items=self.headers)
-
-        if attrSel.result is not None:
-            VALUE_ATTRS = [ x for n, x in attrSel.result ]
-
-    def doBtIds(self):
-        global ID_ATTRS
-
-        attrSel = gui.ListSelecManyDialog(self, title="Seleção de atributos",
-                text="Selecione os atributos que identificam as amostras.",
-                items=self.headers)
-
-        if attrSel.result is not None:
-            ID_ATTRS = [ x for n, x in attrSel.result ]
-
-    def doBtArqIn(self):
-        global ARQ_IN
-
-        fileName = filedialog.askopenfilename(filetypes=[('CSV','*.csv')])
-        if fileName != '':
-            ARQ_IN = fileName
-            self.arqIn.set(ARQ_IN)
-
-            with open(fileName, newline='') as f:
-                csvReader = csv.reader(f, **CSV_OPTIONS)
-                for campos in csvReader:
-                    self.headers = campos
-                    break
-                    
-class ExecutionDialog(Dialog):
-    def __init__(self, master, logger):
-
-        self.logger = logger
-        self.queue = Queue()
-        self.master = master
-
-        t = threading.Thread(target=self.execThread)
-        t.start()
-        master.after(1000, self.periodicPool)
-
-        super().__init__(master,title='TESTE')
-
-    def execThread(self):
-        main(self.logger)
-        self.queue.put(('END',))
-        print('FIM MAIN')
-
-    def periodicPool(self):
-        msg = None
-        cont = True
-        try:
-            msg = self.queue.get(False)
-            print('pegou msg', msg)
-        except Empty:
-            pass
-
-        if msg is not None:
-            if msg[0] == 'END':
-                cont = False
-
-        if cont:
-            self.master.after(1000, self.periodicPool)
-        else:
-            print('Tentando fechar')
-            self.ok()
-
-    def body(self, master):
-        p = ttk.Progressbar(master, orient=tk.HORIZONTAL, mode='indeterminate')
-        p.pack()
-        p.start()
-        master.pack()
-
-    def buttonbox(self):
-        pass
 
 class SOMConfDialog(Dialog):
-    def __init__(self, master):
+    def __init__(self, master, SOM_CONFIG):
+
+        self.SOM_CONFIG = SOM_CONFIG
+
         self.Tipo = tk.StringVar()
         self.FVU = tk.DoubleVar()
         self.maxNodes = tk.IntVar()
@@ -464,15 +496,15 @@ class SOMConfDialog(Dialog):
         master.pack(expand=True, fill='both')
 
     def apply(self):
-        SOM_CONFIG['Tipo'] = self.Tipo.get()
-        SOM_CONFIG['FVU'] = self.FVU.get()
-        SOM_CONFIG['maxNodes'] = self.maxNodes.get()
-        SOM_CONFIG['neighWeightTrain'] = self.neighWeightTrain.get()
-        SOM_CONFIG['neighWeightRefine'] = self.neighWeightRefine.get()
-        SOM_CONFIG['maxStepsPerGeneration'] = self.maxStepsPerGeneration.get()
-        SOM_CONFIG['MSTPeriod'] = self.MSTPeriod.get()
-        SOM_CONFIG['nrows'] = self.nrows.get()
-        SOM_CONFIG['ncols'] = self.ncols.get()
+        self.SOM_CONFIG['Tipo'] = self.Tipo.get()
+        self.SOM_CONFIG['FVU'] = self.FVU.get()
+        self.SOM_CONFIG['maxNodes'] = self.maxNodes.get()
+        self.SOM_CONFIG['neighWeightTrain'] = self.neighWeightTrain.get()
+        self.SOM_CONFIG['neighWeightRefine'] = self.neighWeightRefine.get()
+        self.SOM_CONFIG['maxStepsPerGeneration'] = self.maxStepsPerGeneration.get()
+        self.SOM_CONFIG['MSTPeriod'] = self.MSTPeriod.get()
+        self.SOM_CONFIG['nrows'] = self.nrows.get()
+        self.SOM_CONFIG['ncols'] = self.ncols.get()
 
 #---------------------------------------------------------------------
 # Execução do script
@@ -481,6 +513,7 @@ if __name__ == '__main__':
     logging.config.dictConfig(LOG_CONFIG)
     logger = logging.getLogger()
     app = tk.Tk()
+    app.title('Self Organizing Map')
     confGui = ConfigGUI(app, logger)
     confGui.pack(expand=True, fill='both')
     app.mainloop()
