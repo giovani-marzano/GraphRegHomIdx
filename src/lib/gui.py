@@ -101,7 +101,7 @@ class ListSelecOneFrame(ttk.Frame):
 
         sel = []
         for n, item in enumerate(self._itemsFilter):
-            if str(n) in cursel:
+            if n in cursel:
                 sel.append((n,item))
 
         return sel
@@ -279,7 +279,7 @@ class ListSelectionDialog(Dialog):
     """Dialog that permits the user to select items from a list.
     """
     def __init__(self, parent, title=None,
-            text='', items=[], filterText=''):
+            text='', items=[], selected=None, filterText=''):
 
         self._text = text
         self._items = items
@@ -289,11 +289,14 @@ class ListSelectionDialog(Dialog):
         super().__init__(parent, title)
 
     def body(self, master):
+        label = tk.Label(master, text=self._text)
+        label.pack(side='top')
+
         self._selFrame = ListSelecOneFrame(master,
                 filterText=self._filterText)
 
         self._selFrame.setItems(self._items)
-        self._selFrame.pack(side='top', expand=True, fill='both')
+        self._selFrame.pack(side='bottom', expand=True, fill='both')
 
         master.pack(expand=True, fill='both')
 

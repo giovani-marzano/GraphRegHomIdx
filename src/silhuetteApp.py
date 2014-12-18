@@ -22,38 +22,9 @@ sys.path.append(os.path.join(sys.path[0],'lib'))
 
 import silhouette as silhou
 
-if sys.version_info.major < 3:
-    import codecs
-    def u(x):
-        return codecs.unicode_escape_decode(x)[0]
-else:
-    def u(x):
-        return x
-
 #---------------------------------------------------------------------
 # Variaveis globais de configuração
 #---------------------------------------------------------------------
-
-# Variavéis que controlam de onde os dados de entrada serão lidos
-DIR_INPUT = '.'
-ARQ_IN = os.path.join(DIR_INPUT,'teste.csv')
-
-# Configuracao de que colunas do arquivo csv que serao utilizadas
-# Nome das colunas de identificacao
-ID_ATTRS = ['um']
-# Nome das colunas de valores
-VALUE_ATTRS = ['dois','tres','quatro']
-CLASS_ATTRS = []
-
-# Configuraçoes do formato do arquivo CSV
-CSV_OPTIONS = {
-    'delimiter': ','
-}
-
-# Variáveis que controlam onde os dados de saida do script serão salvos
-DIR_OUTPUT = '.'
-ARQ_RELAT = os.path.join(DIR_OUTPUT,'relatorio.txt')
-ARQ_CLASSES_CLUSTERS = os.path.join(DIR_OUTPUT, 'classesCLUSTERS.csv')
 
 # Configurações para controlar a geração de log pelo script
 ARQ_LOG = 'silhuette.log'
@@ -88,88 +59,166 @@ LOG_CONFIG = {
 }
 
 #---------------------------------------------------------------------
-# Função principal do script
+# Classe de controle do aplicativo
 #---------------------------------------------------------------------
-def main(log):
-    """Função principal do script, executada no final do arquivo.
+class AppControl(object):
+    """Classe que controla o caso de uso do aplicativo.
+
+    Atributos: 
+
+    - fileNameData: Nome do arquivo CSV com os dados a serem processados.
+
+    - idAttrs: Lista com os nomes dos atributos que identificam os elementos.
+
+    - valueAttrs: Lista com os nomes dos atributos de valor dos elementos.
+
+    - clusterAttr: Nome do atributo que determina o cluster
+
+    - fileNameElemSilh: Nome do arquivo CSV em que as silhuetas de cada elemento
+      serão salvas.
+
+    - fileNameRelat: Nome do arquivo TXT onde serão salvas a silhueta total e as
+      silhuetas de cada cluster.
+
+    - attrNames: Lista com os nomes de todos os atributos dispoíveis em no
+      arquivo 'fileNameData'. É preenchida automaticamente quando 'fileNameData'
+      for configurado.
     """
-    log.info('Carregando {}...'.format(ARQ_IN))
-    elements, elemClass = carregaArquivo(ARQ_IN, idAttrs=ID_ATTRS,
-            valueAttrs=VALUE_ATTRS, classAttrs=CLASS_ATTRS)
 
-    log.info('Calculando silhouette indices...')
-    elemSilh, clusSilh, totalSilh, neighClust = silhou.evaluateClusters2(
-            elements, elemClass)
-    log.info('...ok')
+    def __init__(self, logger):
+        """
+        Args:
 
-    writeClassificationCSV(elemClass, elemSilh, neighClust)
+        - logger: Objeto usado para gerar mensagens de log
+        """
+        self.logger = logger
 
-    if ARQ_RELAT is not None and ARQ_RELAT != '':
-        with open(ARQ_RELAT, 'w') as f:
-            f.write('Total silhuette: {0}\n'.format(totalSilh))
-            f.write('Clusters silhuettes:\n')
-            for clIds in sorted(clusSilh.keys()):
-                f.write('  {0}: {1}\n'.format(clIds, clusSilh[clIds]))
+        self.fileNameElemSilh = ''
+        self.fileNameRelat = ''
+        self.clearDataFile()
 
-#---------------------------------------------------------------------
-# Definição das funções auxiliares e procedimentos macro do script
-#---------------------------------------------------------------------
+    def clearDataFile(self):
+        self.fileNameData = ''
+        self.attrNames = []
+        self.idAttrs = []
+        self.valueAttrs = []
+        self.clusterAttr = ''
+        self.csvDialect = None
 
-def carregaArquivo(fileName, idAttrs=[], valueAttrs=[], classAttrs=[]):
+    def openDataFile(self,fileName):
+        self.clearDataFile()
 
-    csvReader = csv.reader(open(fileName, newline=''), **CSV_OPTIONS)
+        f = open(fileName, newline='')
+        self.csvDialect = csv.Sniffer().sniff(f.read(1024))
+        f.seek(0)
+        self.fileNameData = fileName
 
-    elements = {}
-    elemClass = {}
-    idCols = set()
-    valueCols = set()
-    classCols = set()
+        # Le a primeira linha para recuperar os nomes dos atributos
+        reader = csv.reader(f, self.csvDialect)
+        for row in reader:
+            self.attrNames = row
+            break
 
-    elemNum = 0
-    for campos in csvReader:
-        if elemNum == 0:
-            # Estamos lendo a primeira linha que possui o cabecalho
-            cabecalho = campos
-            for n, c in enumerate(campos):
-                if c in idAttrs:
-                    idCols.add(n)
-                elif c in valueAttrs:
-                    valueCols.add(n)
-                elif c in classAttrs:
-                    classCols.add(n)
+        f.close()
 
-        else:
-            idList = [elemNum]
-            vet = []
-            cluster = []
-            for n, v in enumerate(campos):
-                if n in idCols:
-                    idList.append(v)
-                elif n in valueCols:
-                    vet.append(float(v))
-                elif n in classCols:
-                    cluster.append(v)
+    def setIdAttrs(self, attrs):
+        self.idAttrs = [ x for x in attrs if x in self.attrNames ]
 
-            elements[tuple(idList)] = vet
-            elemClass[tuple(idList)] = tuple(cluster)
+    def setValueAttrs(self, attrs):
+        self.valueAttrs = [ x for x in attrs if x in self.attrNames ]
 
-        elemNum += 1
+    def setClusterAttr(self, attr):
+        if attr in self.attrNames:
+            self.clusterAttr = attr
 
-    return elements, elemClass
+    def _carregaDados(self):
+        self.logger.info('Carregando {}...'.format(self.fileNameData))
+        with open(self.fileNameData, newline='') as f:
+            csvReader = csv.reader(f, self.csvDialect)
 
+            elements = {}
+            elemClusters = {}
+            idCols = set()
+            valueCols = set()
+            clusterCol = -1
 
-def writeClassificationCSV(classes, elemSilh, neighboor):
+            elemNum = 0
+            for campos in csvReader:
+                if elemNum == 0:
+                    # Estamos lendo a primeira linha que possui o cabecalho
+                    cabecalho = campos
+                    for n, c in enumerate(campos):
+                        if c in self.idAttrs:
+                            idCols.add(n)
+                        elif c in self.valueAttrs:
+                            valueCols.add(n)
+                        elif c == self.clusterAttr:
+                            clusterCol = n
+                else:
+                    idList = [elemNum]
+                    vet = []
+                    cluster = 'None'
+                    for n, v in enumerate(campos):
+                        if n in idCols:
+                            idList.append(v)
+                        elif n in valueCols:
+                            vet.append(float(v))
+                        elif n == clusterCol:
+                            cluster = v
+                    elements[tuple(idList)] = vet
+                    elemClusters[tuple(idList)] = cluster
 
-    if ARQ_CLASSES_CLUSTERS is None or ARQ_CLASSES_CLUSTERS == '':
-        return
+                elemNum += 1
+        self.logger.info('...ok')
 
-    with open(ARQ_CLASSES_CLUSTERS, 'w', newline='') as f:
-        csvWriter = csv.writer(f, **CSV_OPTIONS)
-        csvWriter.writerow(['#'] + ID_ATTRS + CLASS_ATTRS +
-                ['silhouette'] + [str(x)+'_vizinho' for x in CLASS_ATTRS])
-        for ids in sorted(classes.keys()):
-            row = list(ids) + list(classes[ids]) + [elemSilh[ids]] + list(neighboor[ids])
-            csvWriter.writerow(row)
+        return elements, elemClusters
+
+    def _writeClassificationCSV(self, elemClusters, elemSilh, neighboor):
+
+        if self.fileNameElemSilh is None or self.fileNameElemSilh == '':
+            return
+
+        self.logger.info('Salvando {0}...'.format(self.fileNameElemSilh))
+        with open(self.fileNameElemSilh, 'w', newline='') as f:
+            csvWriter = csv.writer(f, self.csvDialect)
+            csvWriter.writerow(['#'] + self.idAttrs +
+                    ['silhouette', self.clusterAttr,
+                        self.clusterAttr+'_vizinho'])
+            for ids in sorted(elemClusters.keys()):
+                row = list(ids) + [
+                    elemSilh[ids], elemClusters[ids], neighboor[ids]
+                    ]
+                csvWriter.writerow(row)
+
+        self.logger.info('...ok')
+
+    def _writeClusterReport(self, totalSilh, clusSilh):
+        if self.fileNameRelat is not None and self.fileNameRelat != '':
+            self.logger.info('Salvando {0}...'.format(self.fileNameRelat))
+            with open(self.fileNameRelat, 'w') as f:
+                f.write('Total silhuette: {0}\n'.format(totalSilh))
+                f.write('Clusters silhuettes:\n')
+                for clIds in sorted(clusSilh.keys()):
+                    f.write('  {0}: {1}\n'.format(clIds, clusSilh[clIds]))
+            self.logger.info('...ok')
+
+    def _calcSilhuettes(self, elements, elemClusters):
+        self.logger.info('Calculando silhuetas...')
+        retTuple = silhou.evaluateClusters2(elements, elemClusters)
+        self.logger.info('...ok')
+        return retTuple
+
+    def processData(self):
+        """Função principal do script, executada no final do arquivo.
+        """
+        elements, elemClusters = self._carregaDados()
+
+        elemSilh, clusSilh, totalSilh, neighClust = self._calcSilhuettes(
+                elements, elemClusters)
+
+        self._writeClassificationCSV(elemClusters, elemSilh, neighClust)
+
+        self._writeClusterReport(totalSilh, clusSilh) 
 
 
 #---------------------------------------------------------------------
@@ -181,8 +230,6 @@ import tkinter.filedialog as filedialog
 import tkinter.messagebox as messagebox
 import tkinter.ttk as ttk
 import gui
-from queue import Queue, Empty
-import threading
 
 class ConfigGUI(tk.Frame):
     def __init__(self, master, logger, **options):
@@ -192,163 +239,171 @@ class ConfigGUI(tk.Frame):
 
         super().__init__(master, **options)
 
-        self.executar = False
         self.master = master
 
         self.logger = logger
+        self.control = AppControl(logger)
 
+        row = 0
+
+        # Arquivo de entrada
         self.arqIn = tk.StringVar()
-        self.arqIn.set(ARQ_IN)
-        frArqIn = tk.Frame(self)
-        lbArqIn = tk.Label(frArqIn, text="Arquivo de entrada:")
-        lbArqInFile = tk.Label(frArqIn, textvariable=self.arqIn)
-        frArqIn.rowconfigure(0, weight=1)
-        frArqIn.columnconfigure(1, weight=1)
-        lbArqIn.grid(row=0, column=0, sticky=tk.EW)
-        lbArqInFile.grid(row=0, column=1, sticky=tk.EW)
-        frArqIn.grid(row=0, column=0, sticky=tk.EW)
+        self.arqIn.set(self.control.fileNameData)
 
-        self.btArqIn = tk.Button(self, text='1: Selecionar o arquivo de entrada',
-            command=self.doBtArqIn)
-        self.btArqIn.grid(row=1, column=0, sticky=tk.EW)
+        label = tk.Label(self, text="Arquivo de entrada:", anchor=tk.CENTER)
+        entry = tk.Entry(self, textvariable=self.arqIn, state='readonly')
+        button = tk.Button(self, text='Abrir', command=self.do_btArqIn)
 
-        # Lista com os cabeçalhos dos dados
-        self.headers = []
+        label.grid(row=row, column=0, sticky=tk.EW)
+        row += 1
+        entry.grid(row=row, column=0, sticky=tk.EW)
+        button.grid(row=row, column=1, sticky=tk.EW)
+        row += 1
 
-        self.btIds = tk.Button(self, text='2: Selecionar atributos de identificação',
-            command=self.doBtIds)
-        self.btIds.grid(row=2, column=0, sticky=tk.EW)
+        # Lista de atributos de Identificação
+        self.idAttrList = tk.StringVar()
+        self.idAttrList.set(str(self.control.idAttrs))
 
-        self.btValues = tk.Button(self, text='3: Selecionar atributos de valor',
-            command=self.doBtValues)
-        self.btValues.grid(row=3, column=0, sticky=tk.EW)
+        label = tk.Label(self, text="Atributos de Identificação:", anchor=tk.CENTER)
+        entry = tk.Entry(self, textvariable=self.idAttrList, state='readonly')
+        self.btIds = tk.Button(self, text='Selecionar', command=self.do_btIds)
 
-        self.btClasses = tk.Button(self, text='4: Selecionar atributos de classe',
-            command=self.doBtClasses)
-        self.btClasses.grid(row=4, column=0, sticky=tk.EW)
+        label.grid(row=row, column=0, sticky=tk.EW)
+        row += 1
+        entry.grid(row=row, column=0, sticky=tk.EW)
+        self.btIds.grid(row=row, column=1, sticky=tk.EW)
+        row += 1
 
-        self.btComputarSilh = tk.Button(self, text='5: Computar indices de silhueta',
-            command=self.doBtComputarSilh)
-        self.btComputarSilh.grid(row=5, column=0, sticky=tk.EW)
+        # Lista de atributos de valor
+        self.valAttrList = tk.StringVar()
+        self.valAttrList.set(str(self.control.valueAttrs))
 
-    def doBtComputarSilh(self):
-        global ARQ_CLASSES_CLUSTERS
-        global ARQ_RELAT
+        label = tk.Label(self, text="Atributos de valor:", anchor=tk.CENTER)
+        entry = tk.Entry(self, textvariable=self.valAttrList, state='readonly')
+        self.btValues = tk.Button(self, text='Selecionar',
+                command=self.do_btValues)
 
-        ARQ_CLASSES_CLUSTERS = filedialog.asksaveasfilename(
-            title='Arquivo para salvar elementos',
-            filetypes=[('CSV','*.csv')], defaultextension='.csv')
+        label.grid(row=row, column=0, sticky=tk.EW)
+        row += 1
+        entry.grid(row=row, column=0, sticky=tk.EW)
+        self.btValues.grid(row=row, column=1, sticky=tk.EW)
+        row += 1
 
-        ARQ_RELAT = filedialog.asksaveasfilename(
-            title='Arquivo para salvar clusters',
-            filetypes=[('TXT','*.txt')], defaultextension='.txt')
+        # Atributos de cluster
+        self.clusterAttr = tk.StringVar()
+        self.clusterAttr.set(str(self.control.clusterAttr))
 
-        if ARQ_CLASSES_CLUSTERS != '':
-            self.executar = True
-            execDial = ExecutionDialog(self, self.logger)
+        label = tk.Label(self, text="Atributo de cluster:", anchor=tk.CENTER)
+        entry = tk.Entry(self, textvariable=self.clusterAttr, state='readonly')
+        self.btCluster = tk.Button(self, text='Selecionar',
+                command=self.do_btCluster)
 
-            if execDial.result:
-                messagebox.showinfo('Info', 'Geração concluída')
-            else:
-                messagebox.showerror('Error',
-                    'Ocorreu um erro durante a geração.')
+        label.grid(row=row, column=0, sticky=tk.EW)
+        row += 1
+        entry.grid(row=row, column=0, sticky=tk.EW)
+        self.btCluster.grid(row=row, column=1, sticky=tk.EW)
+        row += 1
 
+        # Arquivo de saida para as silhuetas de elementos
+        self.arqOutElemSilh = tk.StringVar()
+        self.arqOutElemSilh.set(self.control.fileNameElemSilh)
 
-    def doBtValues(self):
-        global VALUE_ATTRS
+        label = tk.Label(self,
+                text="Arquivo de saída para silhuetas de elementos:", anchor=tk.CENTER)
+        entry = tk.Entry(self, textvariable=self.arqOutElemSilh, state='readonly')
+        button = tk.Button(self, text='Selecionar', command=self.do_btArqOutElemSilh)
 
+        label.grid(row=row, column=0, sticky=tk.EW)
+        row += 1
+        entry.grid(row=row, column=0, sticky=tk.EW)
+        button.grid(row=row, column=1, sticky=tk.EW)
+        row += 1
+
+        # Arquivo de saida para as silhuetas de cluster e total
+        self.arqOutClusSilh = tk.StringVar()
+        self.arqOutClusSilh.set(self.control.fileNameRelat)
+
+        label = tk.Label(self, text="Arquivo de saída para silhuetas de clusters:", anchor=tk.CENTER)
+        entry = tk.Entry(self, textvariable=self.arqOutClusSilh, state='readonly')
+        button = tk.Button(self, text='Selecionar',
+            command=self.do_btArqOutClusSilh)
+
+        label.grid(row=row, column=0, sticky=tk.EW)
+        row += 1
+        entry.grid(row=row, column=0, sticky=tk.EW)
+        button.grid(row=row, column=1, sticky=tk.EW)
+        row += 1
+
+        # Botão de executar o processamento
+        self.btGerarSilh = tk.Button(self, text='Gerar e salvar silhuetas',
+            command=self.do_btGerarSilh)
+        self.btGerarSilh.grid(row=row, column=0)
+        row += 1
+
+        self.columnconfigure(0, weight=1)
+
+    def do_btValues(self):
         attrSel = gui.ListSelecManyDialog(self, title="Seleção de atributos",
                 text="Selecione os atributos que possuem os dados a serem processados.",
-                items=self.headers)
+                items=self.control.attrNames, selected=self.control.valueAttrs)
 
         if attrSel.result is not None:
-            VALUE_ATTRS = [ x for n, x in attrSel.result ]
+            attrs = [ x for n, x in attrSel.result ]
+            self.control.setValueAttrs(attrs)
+            self.valAttrList.set(str(self.control.valueAttrs))
 
-    def doBtIds(self):
-        global ID_ATTRS
-
+    def do_btIds(self):
         attrSel = gui.ListSelecManyDialog(self, title="Seleção de atributos",
                 text="Selecione os atributos que identificam as amostras.",
-                items=self.headers)
+                items=self.control.attrNames, selected=self.control.idAttrs)
 
         if attrSel.result is not None:
-            ID_ATTRS = [ x for n, x in attrSel.result ]
+            attrs = [ x for n, x in attrSel.result ]
+            self.control.setIdAttrs(attrs)
+            self.idAttrList.set(str(self.control.idAttrs))
 
-    def doBtClasses(self):
-        global CLASS_ATTRS
-
-        attrSel = gui.ListSelecManyDialog(self, title="Seleção de atributos",
-                text="Selecione os atributos que identificam as classes.",
-                items=self.headers)
+    def do_btCluster(self):
+        attrSel = gui.ListSelectionDialog(self, title="Seleção de atributo",
+                text="Selecione o atributo que identifica os clusters.",
+                items=self.control.attrNames, selected=self.control.clusterAttr)
 
         if attrSel.result is not None:
-            CLASS_ATTRS = [ x for n, x in attrSel.result ]
+            for attrTuple in attrSel.result:
+                attr = attrTuple[1]
+                self.control.setClusterAttr(attr)
+                self.clusterAttr.set(str(self.control.clusterAttr))
 
-    def doBtArqIn(self):
-        global ARQ_IN
-
+    def do_btArqIn(self):
         fileName = filedialog.askopenfilename(filetypes=[('CSV','*.csv')])
         if fileName != '':
-            ARQ_IN = fileName
-            self.arqIn.set(ARQ_IN)
+            self.control.openDataFile(fileName)
+            self.arqIn.set(self.control.fileNameData)
+            self.idAttrList.set(str(self.control.idAttrs))
+            self.valAttrList.set(str(self.control.valueAttrs))
 
-            with open(fileName, newline='') as f:
-                csvReader = csv.reader(f, **CSV_OPTIONS)
-                for campos in csvReader:
-                    self.headers = campos
-                    break
+    def do_btArqOutElemSilh(self):
+        fileName = filedialog.asksaveasfilename(
+            title='Arquivo para salvar silhuetas de elementos',
+            filetypes=[('CSV','*.csv')], defaultextension='.csv')
+        self.control.fileNameElemSilh = fileName
+        self.arqOutElemSilh.set(fileName)
 
-class ExecutionDialog(Dialog):
-    def __init__(self, master, logger):
+    def do_btArqOutClusSilh(self):
+        fileName = filedialog.asksaveasfilename(
+            title='Arquivo para salvar silhuetas de clusters',
+            filetypes=[('TXT','*.txt')], defaultextension='.txt')
+        self.control.fileNameRelat = fileName
+        self.arqOutClusSilh.set(fileName)
 
-        self.logger = logger
-        self.queue = Queue()
-        self.master = master
+    def do_btGerarSilh(self):
+        if messagebox.askokcancel('Confirmar execução',
+                'O programa irá realizar dos índices de silhueta.\n'+
+                'Isto pode levar algum tempo.\n\n' +
+                'Deseja continuar ?'):
 
-        t = threading.Thread(target=self.execThread)
-        t.start()
-        master.after(1000, self.periodicPool)
+            execDial = gui.ExecutionDialog(self, command=self.control.processData,
+                title='Executando...')
 
-        self.result = False
-
-        super().__init__(master,title='TESTE')
-
-    def execThread(self):
-        try:
-            main(self.logger)
-            self.queue.put(('END',))
-        except Exception as ex:
-            self.queue.put(('ERROR',))
-            raise ex
-
-    def periodicPool(self):
-        msg = None
-        cont = True
-        try:
-            msg = self.queue.get(False)
-        except Empty:
-            pass
-
-        if msg is not None:
-            cont = False
-            if msg[0] == 'END':
-                self.result = True
-            elif msg[0] == 'ERROR':
-                self.result = False
-
-        if cont:
-            self.master.after(1000, self.periodicPool)
-        else:
-            self.ok()
-
-    def body(self, master):
-        p = ttk.Progressbar(master, orient=tk.HORIZONTAL, mode='indeterminate')
-        p.pack()
-        p.start()
-        master.pack()
-
-    def buttonbox(self):
-        pass
 
 #---------------------------------------------------------------------
 # Execução do script
