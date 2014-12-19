@@ -97,7 +97,7 @@ class ListSelecOneFrame(ttk.Frame):
         :return: Lista de tuplas com a posição do item selecionado na lista
         original e o item selecionado.
         """
-        cursel = self.listBox.curselection()
+        cursel = list(map(int,self.listBox.curselection()))
 
         sel = []
         for n, item in enumerate(self._itemsFilter):

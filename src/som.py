@@ -245,6 +245,7 @@ import tkinter.filedialog as filedialog
 import tkinter.messagebox as messagebox
 import tkinter.ttk as ttk
 import gui
+import textwrap
 
 class ConfigGUI(tk.Frame):
     def __init__(self, master, logger, **options):
@@ -270,85 +271,82 @@ class ConfigGUI(tk.Frame):
         entry = tk.Entry(self, textvariable=self.arqIn, state='readonly')
         button = tk.Button(self, text='Abrir', command=self.do_btArqIn)
 
-        label.grid(row=row, column=0, sticky=tk.EW)
-        entry.grid(row=row, column=1, sticky=tk.EW)
-        button.grid(row=row, column=2, sticky=tk.EW)
-
-        row += 1
+        row = self._gridLabelEntryButton(label, entry, button, row)
 
         # Lista de atributos de Identificação
         self.idAttrList = tk.StringVar()
         self.idAttrList.set(str(self.control.idAttrs))
 
-        label = tk.Label(self, text="Atributos de\nIdentificação:")
+        label = tk.Label(self, text="Atributos de Identificação:")
         entry = tk.Entry(self, textvariable=self.idAttrList, state='readonly')
-        self.btIds = tk.Button(self, text='Selecionar', command=self.do_btIds)
+        button = tk.Button(self, text='Selecionar', command=self.do_btIds)
 
-        label.grid(row=row, column=0, sticky=tk.EW)
-        entry.grid(row=row, column=1, sticky=tk.EW)
-        self.btIds.grid(row=row, column=2, sticky=tk.EW)
-
-        row += 1
+        row = self._gridLabelEntryButton(label, entry, button, row)
 
         # Lista de atributos de Identificação
         self.valAttrList = tk.StringVar()
         self.valAttrList.set(str(self.control.valueAttrs))
 
-        label = tk.Label(self, text="Atributos de\nvalor:")
+        label = tk.Label(self, text="Atributos de valor:")
         entry = tk.Entry(self, textvariable=self.valAttrList, state='readonly')
-        self.btValues = tk.Button(self, text='Selecionar',
-                command=self.do_btValues)
+        button = tk.Button(self, text='Selecionar', command=self.do_btValues)
 
-        label.grid(row=row, column=0, sticky=tk.EW)
-        entry.grid(row=row, column=1, sticky=tk.EW)
-        self.btValues.grid(row=row, column=2, sticky=tk.EW)
-
-        row += 1
+        row = self._gridLabelEntryButton(label, entry, button, row)
 
         # Configurações do SOM
-        self.btConfSOM = tk.Button(self, text='Configuração do SOM...',
+        button = tk.Button(self, text='Configuração do SOM...',
             command=self.do_btConfSOM)
-        self.btConfSOM.grid(row=row, column=1)
 
-        row += 1
+        row = self._gridButton(button, row)
 
         # Arquivo de saida do SOM
         self.arqOutSOM = tk.StringVar()
         self.arqOutSOM.set(self.control.fileNameSOM)
 
-        label = tk.Label(self, text="Arquivo de saída\npara o SOM:")
+        label = tk.Label(self, text="Arquivo de saída para o SOM:")
         entry = tk.Entry(self, textvariable=self.arqOutSOM, state='readonly')
         button = tk.Button(self, text='Selecionar', command=self.do_btArqOutSOM)
 
-        label.grid(row=row, column=0, sticky=tk.EW)
-        entry.grid(row=row, column=1, sticky=tk.EW)
-        button.grid(row=row, column=2, sticky=tk.EW)
-
-        row += 1
+        row = self._gridLabelEntryButton(label, entry, button, row)
 
         # Arquivo de saida para as associaçoes de cluster
         self.arqOutClusAssoc = tk.StringVar()
         self.arqOutClusAssoc.set(self.control.fileNameClusAssoc)
 
-        label = tk.Label(self, text="Arquivo de saída\npara o SOM:")
+        label = tk.Label(self, text="Arquivo de saída para o SOM:")
         entry = tk.Entry(self, textvariable=self.arqOutClusAssoc, state='readonly')
         button = tk.Button(self, text='Selecionar',
             command=self.do_btArqOutClussAssoc)
 
-        label.grid(row=row, column=0, sticky=tk.EW)
-        entry.grid(row=row, column=1, sticky=tk.EW)
-        button.grid(row=row, column=2, sticky=tk.EW)
-
-        row += 1
+        row = self._gridLabelEntryButton(label, entry, button, row)
 
         # Botão de executar o processamento
-        self.btGerarSOM = tk.Button(self, text='Gerar e salvar SOM',
+        button = tk.Button(self, text='Gerar e salvar SOM',
             command=self.do_btGerarSOM)
-        self.btGerarSOM.grid(row=row, column=1)
 
-        row += 1
+        row = self._gridButton(button, row)
 
         self.columnconfigure(1, weight=1)
+
+    def _gridLabelEntryButton(self, label, entry, button, row):
+        """Put label, entry and button widgets in frame's grid. The
+        specified row is used as base row.
+
+        Return the next available row in the grid.
+        """
+        label['text'] = textwrap.fill(label['text'], 20)
+        label.grid(row=row, column=0, sticky=tk.EW)
+        entry.grid(row=row, column=1, sticky=tk.EW) 
+        button.grid(row=row, column=2, sticky=tk.EW) 
+        return row + 1
+
+    def _gridButton(self, button, row):
+        """Put button in frame's grid. The specified row is used as base row.
+
+        Return the next available row in the grid.
+        """
+        button.grid(row=row, column=1, sticky=tk.EW) 
+        return row + 1
 
     def do_btConfSOM(self):
         confDialog = SOMConfDialog(self, self.control.SOMConf)

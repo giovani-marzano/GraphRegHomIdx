@@ -230,6 +230,7 @@ import tkinter.filedialog as filedialog
 import tkinter.messagebox as messagebox
 import tkinter.ttk as ttk
 import gui
+import textwrap
 
 class ConfigGUI(tk.Frame):
     def __init__(self, master, logger, **options):
@@ -254,11 +255,7 @@ class ConfigGUI(tk.Frame):
         entry = tk.Entry(self, textvariable=self.arqIn, state='readonly')
         button = tk.Button(self, text='Abrir', command=self.do_btArqIn)
 
-        label.grid(row=row, column=0, sticky=tk.EW)
-        row += 1
-        entry.grid(row=row, column=0, sticky=tk.EW)
-        button.grid(row=row, column=1, sticky=tk.EW)
-        row += 1
+        row = self._gridLabelEntryButton(label, entry, button, row)
 
         # Lista de atributos de Identificação
         self.idAttrList = tk.StringVar()
@@ -268,11 +265,7 @@ class ConfigGUI(tk.Frame):
         entry = tk.Entry(self, textvariable=self.idAttrList, state='readonly')
         self.btIds = tk.Button(self, text='Selecionar', command=self.do_btIds)
 
-        label.grid(row=row, column=0, sticky=tk.EW)
-        row += 1
-        entry.grid(row=row, column=0, sticky=tk.EW)
-        self.btIds.grid(row=row, column=1, sticky=tk.EW)
-        row += 1
+        row = self._gridLabelEntryButton(label, entry, self.btIds, row)
 
         # Lista de atributos de valor
         self.valAttrList = tk.StringVar()
@@ -283,11 +276,7 @@ class ConfigGUI(tk.Frame):
         self.btValues = tk.Button(self, text='Selecionar',
                 command=self.do_btValues)
 
-        label.grid(row=row, column=0, sticky=tk.EW)
-        row += 1
-        entry.grid(row=row, column=0, sticky=tk.EW)
-        self.btValues.grid(row=row, column=1, sticky=tk.EW)
-        row += 1
+        row = self._gridLabelEntryButton(label, entry, self.btValues, row)
 
         # Atributos de cluster
         self.clusterAttr = tk.StringVar()
@@ -298,11 +287,7 @@ class ConfigGUI(tk.Frame):
         self.btCluster = tk.Button(self, text='Selecionar',
                 command=self.do_btCluster)
 
-        label.grid(row=row, column=0, sticky=tk.EW)
-        row += 1
-        entry.grid(row=row, column=0, sticky=tk.EW)
-        self.btCluster.grid(row=row, column=1, sticky=tk.EW)
-        row += 1
+        row = self._gridLabelEntryButton(label, entry, self.btCluster, row)
 
         # Arquivo de saida para as silhuetas de elementos
         self.arqOutElemSilh = tk.StringVar()
@@ -313,11 +298,7 @@ class ConfigGUI(tk.Frame):
         entry = tk.Entry(self, textvariable=self.arqOutElemSilh, state='readonly')
         button = tk.Button(self, text='Selecionar', command=self.do_btArqOutElemSilh)
 
-        label.grid(row=row, column=0, sticky=tk.EW)
-        row += 1
-        entry.grid(row=row, column=0, sticky=tk.EW)
-        button.grid(row=row, column=1, sticky=tk.EW)
-        row += 1
+        row = self._gridLabelEntryButton(label, entry, button, row)
 
         # Arquivo de saida para as silhuetas de cluster e total
         self.arqOutClusSilh = tk.StringVar()
@@ -328,19 +309,36 @@ class ConfigGUI(tk.Frame):
         button = tk.Button(self, text='Selecionar',
             command=self.do_btArqOutClusSilh)
 
-        label.grid(row=row, column=0, sticky=tk.EW)
-        row += 1
-        entry.grid(row=row, column=0, sticky=tk.EW)
-        button.grid(row=row, column=1, sticky=tk.EW)
-        row += 1
+        row = self._gridLabelEntryButton(label, entry, button, row)
 
         # Botão de executar o processamento
         self.btGerarSilh = tk.Button(self, text='Gerar e salvar silhuetas',
             command=self.do_btGerarSilh)
         self.btGerarSilh.grid(row=row, column=0)
-        row += 1
+
+        row = self._gridButton(self.btGerarSilh, row)
 
         self.columnconfigure(0, weight=1)
+
+    def _gridLabelEntryButton(self, label, entry, button, row):
+        """Put label, entry and button widgets in frame's grid. The
+        specified row is used as base row.
+
+        Return the next available row in the grid.
+        """
+        label['text'] = textwrap.fill(label['text'], 20)
+        label.grid(row=row, column=0, sticky=tk.EW)
+        entry.grid(row=row, column=1, sticky=tk.EW) 
+        button.grid(row=row, column=2, sticky=tk.EW) 
+        return row + 1
+
+    def _gridButton(self, button, row):
+        """Put button in frame's grid. The specified row is used as base row.
+
+        Return the next available row in the grid.
+        """
+        button.grid(row=row, column=1, sticky=tk.EW) 
+        return row + 1
 
     def do_btValues(self):
         attrSel = gui.ListSelecManyDialog(self, title="Seleção de atributos",
