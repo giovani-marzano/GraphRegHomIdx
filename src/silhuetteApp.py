@@ -234,10 +234,6 @@ import textwrap
 
 class ConfigGUI(tk.Frame):
     def __init__(self, master, logger, **options):
-        global ARQ_IN
-
-        ARQ_IN = ''
-
         super().__init__(master, **options)
 
         self.master = master
