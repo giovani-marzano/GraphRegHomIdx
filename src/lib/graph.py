@@ -916,6 +916,9 @@ def loadGraphml(fileName, relationAttr=EDGE_RELATION_ATTR):
                 graph.setEdgeAttr(edge, attrSpec.name,
                     attrSpec.strToType(xdata.text))
 
+    for attrSpec in graphAttrs.values():
+        graph.addGraphAttrSpec(attrSpec)
+
     for attrSpec in nodeAttrs.values():
         graph.addNodeAttrSpec(attrSpec)
 
