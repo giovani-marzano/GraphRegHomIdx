@@ -5,6 +5,7 @@ import os.path
 import sys
 import logging
 import logging.config
+import traceback
 
 # Acrescentando o diretorio lib ao path. Lembrando que sys.path[0] representa o
 # diretório onde este script se encontra
@@ -82,6 +83,8 @@ class GraphAppControl(object):
                 handler(graphModel)
             except Exception as ex:
                 self.logger.warning(str(ex))
+                exStr = traceback.format_exc()
+                self.logger.debug(exStr)
 
     def addDeleteHandler(self, handler):
         """Insert handlers that will be called whenever a graph is deleted from
@@ -100,6 +103,8 @@ class GraphAppControl(object):
                 handler(graphModel)
             except Exception as ex:
                 self.logger.warning(str(ex))
+                exStr = traceback.format_exc()
+                self.logger.debug(exStr)
 
     def addChangeHandler(self, handler):
         """Insert handlers that will be called whenever a graph is changed in
@@ -118,14 +123,17 @@ class GraphAppControl(object):
                 handler(graphModel)
             except Exception as ex:
                 self.logger.warning(str(ex))
+                exStr = traceback.format_exc()
+                self.logger.debug(exStr)
 
     def loadGraphml(self, fileName, name=None,
             relationAttr=gr.EDGE_RELATION_ATTR):
         if name is None:
             n = 1
-            while n in self.graphModels:
-                n += 1
             name = '{0:03}'.format(n)
+            while name in self.graphModels:
+                n += 1
+                name = '{0:03}'.format(n)
 
         if name in self.graphModels:
             return (False, 'Já existe grafo com nome "{0}"'.format(name))
@@ -136,7 +144,23 @@ class GraphAppControl(object):
             self.graphModels[name] = gm
             self._callInsertHandlers(gm)
         except Exception as ex:
+            self.logger.error(str(ex))
+            exStr = traceback.format_exc()
+            self.logger.debug(exStr)
             return (False, str(ex))
+        else:
+            return (True, '')
+
+    def removeGraph(self, graphName):
+        """Remove a graph from the collection.
+
+        Args:
+            - graphName: Name of the graph to be removed
+        """
+        if graphName in self.graphModels:
+            gmod = self.graphModels[graphName]
+            del self.graphModels[graphName]
+            self._callDeleteHandlers(gmod)
 
 #---------------------------------------------------------------------
 # Classes GUI
@@ -197,7 +221,7 @@ class GraphAppGUI(tk.Frame):
         iid = None
         gmod = None
         if graphId in self.graphToIid:
-            iid = self.graphToIid.get[graphId]
+            iid = self.graphToIid[graphId]
             gmod = graphId
         elif graphId in self.iidToGraph:
             iid = graphId
@@ -241,6 +265,9 @@ class GraphAppGUI(tk.Frame):
             text=graphModel.name,
             values=(graphModel.fileName, 'graph'))
 
+        self.iidToGraph[iid] = graphModel
+        self.graphToIid[graphModel] = iid
+
         secId = self.graphTree.insert(iid, 'end',
             text='Num. nodos:',
             values=(graphModel.graph.getNumNodes(), 'stats'))
@@ -266,35 +293,42 @@ class GraphAppGUI(tk.Frame):
                 text=attr,
                 values=(graphModel.graph.getGraphAttr(attr), 'graphAttr'))
             spec = graphModel.graph.getGraphAttrSpec(attr)
-            self.graphTree.insert(attrId, 'end',
-                text='Tipo:',
-                values=(spec.type, 'attrType'))
+            if spec is not None:
+                self.graphTree.insert(attrId, 'end',
+                    text='Tipo:',
+                    values=(spec.type, 'attrType'))
 
         attrNames = graphModel.graph.getNodeAttrNames()
         secId = self.graphTree.insert(iid, 'end',
             text='Atributos de nodo',
             values=(len(attrNames), 'attrs'))
         for attr in sorted(attrNames):
-            spec = graphModel.graph.getNodeAttrSpec(attr)
             attrId = self.graphTree.insert(secId, 'end',
                 text=attr,
-                values=(spec.type, 'nodeAttr'))
-            self.graphTree.insert(attrId, 'end',
-                text='Default:',
-                values=(spec.default, 'attrDefault'))
+                values=('', 'nodeAttr'))
+            spec = graphModel.graph.getNodeAttrSpec(attr)
+            if spec is not None:
+                self.graphTree.item(attrId, values=(spec.type, 'nodeAttr'))
+                if spec.default is not None:
+                    self.graphTree.insert(attrId, 'end',
+                        text='Default:',
+                        values=(spec.default, 'attrDefault'))
 
         attrNames = graphModel.graph.getEdgeAttrNames()
         secId = self.graphTree.insert(iid, 'end',
             text='Atributos de aresta',
             values=(len(attrNames), 'attrs'))
         for attr in sorted(attrNames):
-            spec = graphModel.graph.getEdgeAttrSpec(attr)
             attrId = self.graphTree.insert(secId, 'end',
                 text=attr,
-                values=(spec.type, 'edgeAttr'))
-            self.graphTree.insert(attrId, 'end',
-                text='Default:',
-                values=(spec.default, 'attrDefault'))
+                values=('', 'edgeAttr'))
+            spec = graphModel.graph.getEdgeAttrSpec(attr)
+            if spec is not None:
+                self.graphTree.item(attrId, values=(spec.type, 'nodeAttr'))
+                if spec.default is not None:
+                    self.graphTree.insert(attrId, 'end',
+                        text='Default:',
+                        values=(spec.default, 'attrDefault'))
 
     def _createMenu(self):
         top = self.winfo_toplevel()
@@ -304,14 +338,24 @@ class GraphAppGUI(tk.Frame):
         m = tk.Menu(self.menuBar)
         self.menuBar.add_cascade(label='Grafo', menu=m)
         m.add_command(label='Abrir graphml...', command=self._menuCmdOpenGraphml)
+        m.add_command(label='Remover...', command=self._menuCmdRemoveGraph)
 
     def _menuCmdOpenGraphml(self):
         dialog = OpenGraphmlDialog(self, self.control, title="Abrir graphml")
+
+    def _menuCmdRemoveGraph(self):
+        items = sorted(self.control.graphModels.keys())
+        dialog = gui.ListSelectionDialog(self, title='Remoção de grafo',
+            text='Selecione o grafo a ser removido', items=items)
+        if dialog.result is not None:
+            for i, selection in dialog.result:
+                self.control.removeGraph(selection)
 
 class OpenGraphmlDialog(Dialog):
     def __init__(self, master, control, title=None):
 
         self.control = control
+        self.arqIn = tk.StringVar()
 
         super().__init__(master, title)
 
@@ -324,9 +368,10 @@ class OpenGraphmlDialog(Dialog):
 
         fileLabel = ttk.Label(master, text='Arquivo:')
         fileLabel.grid(row=1, column=0, sticky=tk.EW)
-        self.fileEntry = ttk.Entry(master)
+        self.fileEntry = ttk.Entry(master, textvariable=self.arqIn)
         self.fileEntry.grid(row=1, column=1, sticky=tk.EW)
-        fileButton = ttk.Button(master, text='Abrir...')
+        fileButton = ttk.Button(master, text='Abrir...',
+            command=self._doBtnFileOpen)
         fileButton.grid(row=1, column=2, sticky=tk.EW)
 
         relationLabel = ttk.Label(master, text='Atributo de relação:')
@@ -337,6 +382,27 @@ class OpenGraphmlDialog(Dialog):
         master.pack(expand=True, fill='both')
 
         return self.nameEntry
+
+    def _doBtnFileOpen(self):
+        fileName = tk.filedialog.askopenfilename(
+            filetypes=[('graphml','*.graphml')])
+        if fileName != '':
+            self.arqIn.set(fileName)
+
+    def apply(self):
+        relation = self.relationEntry.get().strip()
+        if len(relation) == 0:
+            relation = None
+
+        fileName = self.arqIn.get().strip()
+        name = self.nameEntry.get().strip()
+        if len(name) == 0:
+            name = None
+
+        ok, errmsg = self.control.loadGraphml(fileName, name, relation)
+
+        if not ok:
+            tk.messagebox.showerror('Erro', errmsg)
 
 
 #---------------------------------------------------------------------

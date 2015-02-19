@@ -284,7 +284,7 @@ class ListSelectionDialog(Dialog):
         self._text = text
         self._items = items
         self._filterText = filterText
-        self.result = []
+        self.result = None
 
         super().__init__(parent, title)
 
