@@ -298,6 +298,9 @@ class MultiGraph(object):
     def getEdgeAttrNames(self):
         return set(self.edgeAttrs.keys())
 
+    def getGraphAttrNames(self):
+        return set(self.graphAttrs.keys())
+
     def setGraphAttr(self, attr, value):
         self.graphAttrs[attr] = value
 
