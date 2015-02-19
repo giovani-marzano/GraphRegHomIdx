@@ -126,14 +126,22 @@ class GraphAppControl(object):
                 exStr = traceback.format_exc()
                 self.logger.debug(exStr)
 
+    def generateNumericName(self):
+        """Generates an available numeric name for graphs.
+        Return:
+            - A string with the available name
+        """
+        n = 1
+        name = '{0:03}'.format(n)
+        while name in self.graphModels:
+            n += 1
+            name = '{0:03}'.format(n)
+        return name
+
     def loadGraphml(self, fileName, name=None,
             relationAttr=gr.EDGE_RELATION_ATTR):
         if name is None:
-            n = 1
-            name = '{0:03}'.format(n)
-            while name in self.graphModels:
-                n += 1
-                name = '{0:03}'.format(n)
+            name = self.generateNumericName()
 
         if name in self.graphModels:
             return (False, 'Já existe grafo com nome "{0}"'.format(name))
@@ -150,6 +158,23 @@ class GraphAppControl(object):
             return (False, str(ex))
         else:
             return (True, '')
+
+    def inspectGraphmlAttributes(self, fileName):
+        """Read from a graphml the names and types of graph attributes.
+
+        Args:
+            - filename: Path of the file to inspect
+
+        Return:
+            (graphAttrSpecs, nodeAttrSpecs, edgeAttrSpecs): Tuple of
+            dictionaries of graph's attributes.
+        """
+        # OBS: Estamos lendo o grafo inteiro do arquivo, mas poderíamos criar
+        # uma função de leitura específica para ler apenas os atributos para
+        # sermos mais eficientes.
+        g = gr.loadGraphml(fileName)
+
+        return (g.graphAttrSpecs, g.nodeAttrSpecs, g.edgeAttrSpecs)
 
     def removeGraph(self, graphName):
         """Remove a graph from the collection.
@@ -171,6 +196,7 @@ import tkinter.messagebox as messagebox
 import tkinter.ttk as ttk
 from tkinter.simpledialog import Dialog
 import gui
+import textwrap
 
 class GraphAppGUI(tk.Frame):
     def __init__(self, master, control, logger, **options):
@@ -356,6 +382,8 @@ class OpenGraphmlDialog(Dialog):
 
         self.control = control
         self.arqIn = tk.StringVar()
+        self.relationAttr = tk.StringVar()
+        self.edgeAttrs = []
 
         super().__init__(master, title)
 
@@ -368,16 +396,19 @@ class OpenGraphmlDialog(Dialog):
 
         fileLabel = ttk.Label(master, text='Arquivo:')
         fileLabel.grid(row=1, column=0, sticky=tk.EW)
-        self.fileEntry = ttk.Entry(master, textvariable=self.arqIn)
-        self.fileEntry.grid(row=1, column=1, sticky=tk.EW)
+        fileEntry = ttk.Entry(master, textvariable=self.arqIn)
+        fileEntry.grid(row=1, column=1, sticky=tk.EW)
         fileButton = ttk.Button(master, text='Abrir...',
             command=self._doBtnFileOpen)
         fileButton.grid(row=1, column=2, sticky=tk.EW)
 
         relationLabel = ttk.Label(master, text='Atributo de relação:')
         relationLabel.grid(row=2, column=0, sticky=tk.EW)
-        self.relationEntry = ttk.Entry(master)
-        self.relationEntry.grid(row=2, column=1, columnspan=2, sticky=tk.EW)
+        relationEntry = ttk.Entry(master, textvariable=self.relationAttr)
+        relationEntry.grid(row=2, column=1, sticky=tk.EW)
+        self.relationButton = ttk.Button(master, text='Escolher...',
+            command=self._doBtnChooseRelation, state=tk.DISABLED)
+        self.relationButton.grid(row=2, column=2, sticky=tk.EW)
 
         master.pack(expand=True, fill='both')
 
@@ -388,9 +419,23 @@ class OpenGraphmlDialog(Dialog):
             filetypes=[('graphml','*.graphml')])
         if fileName != '':
             self.arqIn.set(fileName)
+            _,_,edgeAttrs = self.control.inspectGraphmlAttributes(fileName)
+            self.edgeAttrs = sorted(edgeAttrs.keys())
+            self.relationButton['state'] = tk.NORMAL
+
+    def _doBtnChooseRelation(self):
+        dialog = gui.ListSelectionDialog(self, title='Atributo de relação',
+            text=textwrap.fill('Selecione o atributo que indica a relação ' +
+                'a que cada aresta pertence (tipo da aresta).',40),
+                items=self.edgeAttrs)
+
+        if dialog.result is not None:
+            for _, attr in dialog.result:
+                self.relationAttr.set(attr)
+                break
 
     def apply(self):
-        relation = self.relationEntry.get().strip()
+        relation = self.relationAttr.get().strip()
         if len(relation) == 0:
             relation = None
 
