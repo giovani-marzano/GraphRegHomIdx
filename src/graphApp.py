@@ -51,16 +51,18 @@ LOG_CONFIG = {
 # Classes de controle
 #---------------------------------------------------------------------
 import graph as gr
+import csv
 
 class GraphModel(object):
-    def __init__(self, graphObj, name, fileName=None):
+    def __init__(self, graphObj, name, filename=None):
         self.graph = graphObj
         self.name = name
-        self.fileName = fileName
+        self.filename = filename
 
 class GraphAppControl(object):
     def __init__(self, logger):
         self.logger = logger
+        self.csvDialect = csv.excel()
         self.graphModels = {}
         self.insertHandlers = []
         self.deleteHandlers = []
@@ -138,28 +140,29 @@ class GraphAppControl(object):
             name = '{0:03}'.format(n)
         return name
 
-    def loadGraphml(self, fileName, name=None,
+    def insertGraph(self, g, name=None, filename=None):
+        if name is None:
+            name = self.generateNumericName()
+
+        if name in self.graphModels:
+            raise ValueError('Já existe grafo com nome "{0}"'.format(name))
+
+        gm = GraphModel(g, name, filename)
+        self.graphModels[name] = gm
+        self._callInsertHandlers(gm)
+
+    def loadGraphml(self, filename, name=None,
             relationAttr=gr.EDGE_RELATION_ATTR):
         if name is None:
             name = self.generateNumericName()
 
         if name in self.graphModels:
-            return (False, 'Já existe grafo com nome "{0}"'.format(name))
+            raise ValueError('Já existe grafo com nome "{0}"'.format(name))
 
-        try:
-            g = gr.loadGraphml(fileName, relationAttr)
-            gm = GraphModel(g, name, fileName)
-            self.graphModels[name] = gm
-            self._callInsertHandlers(gm)
-        except Exception as ex:
-            self.logger.error(str(ex))
-            exStr = traceback.format_exc()
-            self.logger.debug(exStr)
-            return (False, str(ex))
-        else:
-            return (True, '')
+        g = gr.loadGraphml(filename, relationAttr)
+        self.insertGraph(g, name=name, filename=filename)
 
-    def inspectGraphmlAttributes(self, fileName):
+    def inspectGraphmlAttributes(self, filename):
         """Read from a graphml the names and types of graph attributes.
 
         Args:
@@ -172,7 +175,7 @@ class GraphAppControl(object):
         # OBS: Estamos lendo o grafo inteiro do arquivo, mas poderíamos criar
         # uma função de leitura específica para ler apenas os atributos para
         # sermos mais eficientes.
-        g = gr.loadGraphml(fileName)
+        g = gr.loadGraphml(filename)
 
         return (g.graphAttrSpecs, g.nodeAttrSpecs, g.edgeAttrSpecs)
 
@@ -186,6 +189,66 @@ class GraphAppControl(object):
             gmod = self.graphModels[graphName]
             del self.graphModels[graphName]
             self._callDeleteHandlers(gmod)
+
+    def inspectCsv(self, filename):
+        with open(filename, newline='') as f:
+            self.csvDialect = csv.Sniffer().sniff(f.read(5000))
+            f.seek(0)
+
+            firstRow = []
+
+            # Le a primeira linha para recuperar os nomes dos atributos
+            reader = csv.reader(f, self.csvDialect)
+            for row in reader:
+                firstRow = row
+                break
+
+            return firstRow
+
+    def loadCsvGraphEdges(self, filename, srcNodeCol, tgtNodeCol,
+            name=None, relationCol=None, weightCol=None,
+            firstRowIsHeading=False):
+
+        g = gr.MultiGraph()
+
+        relationAttr = 'Relation'
+        weightAttr = 'EdgeCount'
+
+        with open(filename, newline='') as f:
+            reader = csv.reader(f, self.csvDialect)
+
+            if firstRowIsHeading:
+                for row in reader:
+                    if relationCol is not None:
+                        relationAttr = row[relationCol].strip()
+                    if weightCol is not None:
+                        weightAttr = row[weightCol].strip()
+                    break
+
+            spec = gr.AttrSpec(weightAttr, 'float', 1.0)
+            g.addEdgeAttrSpec(spec)
+
+            for row in reader:
+                src = row[srcNodeCol].strip()
+                tgt = row[tgtNodeCol].strip()
+                rel = 0
+                weigth = 1.0
+                if relationCol is not None:
+                    rel = row[relationCol].strip()
+                if weightCol is not None:
+                    weigth = float(row[weightCol])
+
+                if g.hasEdge(src, tgt, rel):
+                    oldWeight = g.getEdgeAttr((src, tgt, rel), weightAttr)
+                    weigth += oldWeight
+                    g.setEdgeAttr((src,tgt,rel), weightAttr, weigth)
+                else:
+                    g.addEdge(src, tgt, rel)
+                    g.setEdgeAttr((src,tgt,rel), weightAttr, weigth)
+            # end for
+        #end with
+
+        self.insertGraph(g, name, filename)
 
 #---------------------------------------------------------------------
 # Classes GUI
@@ -227,11 +290,11 @@ class GraphAppGUI(tk.Frame):
 
         self._createMenu()
 
-        control.addInsertHandler(self._updateGraphView)
-        control.addChangeHandler(self._updateGraphView)
-        control.addDeleteHandler(self._removeGraphView)
+        control.addInsertHandler(self.updateGraphView)
+        control.addChangeHandler(self.updateGraphView)
+        control.addDeleteHandler(self.removeGraphView)
 
-    def _getGraphAndTreeIid(self, graphId):
+    def getGraphAndTreeIid(self, graphId):
         """Retrieve the graph's Treeview iid and it's GraphModel if they exist.
 
         Args:
@@ -255,7 +318,7 @@ class GraphAppGUI(tk.Frame):
 
         return (iid, gmod)
 
-    def _removeGraphView(self, graphId):
+    def removeGraphView(self, graphId):
         """Remove a graph from the view.
 
         Args:
@@ -266,7 +329,7 @@ class GraphAppGUI(tk.Frame):
             - The removed graphModel or None
         """
 
-        iid, gmod = self._getGraphAndTreeIid(graphId)
+        iid, gmod = self.getGraphAndTreeIid(graphId)
 
         if iid is not None:
             self.graphTree.delete(iid)
@@ -275,21 +338,21 @@ class GraphAppGUI(tk.Frame):
 
         return gmod
 
-    def _updateGraphView(self, graphModel):
+    def updateGraphView(self, graphModel):
         """Inserts or updates a graph in the view.
         """
         pos = 'end'
-        iid, _ = self._getGraphAndTreeIid(graphModel)
+        iid, _ = self.getGraphAndTreeIid(graphModel)
 
         # Removing the graph
         if iid is not None:
             pos = self.graphTree.index(iid)
-            self._removeGraphView(iid)
+            self.removeGraphView(iid)
 
         # (Re)inserting the graph
         iid = self.graphTree.insert('', pos,
             text=graphModel.name,
-            values=(graphModel.fileName, 'graph'))
+            values=(graphModel.filename, 'graph'))
 
         self.iidToGraph[iid] = graphModel
         self.graphToIid[graphModel] = iid
@@ -356,6 +419,17 @@ class GraphAppGUI(tk.Frame):
                         text='Default:',
                         values=(spec.default, 'attrDefault'))
 
+    def getSelectedGraphIid(self):
+        sel = self.graphTree.selection()
+
+        iid = None
+        if len(sel) > 0:
+            iid = sel[0]
+            while self.graphTree.parent(iid) != '':
+                iid = self.graphTree.parent(iid)
+
+        return iid
+
     def _createMenu(self):
         top = self.winfo_toplevel()
         self.menuBar = tk.Menu(top)
@@ -363,13 +437,17 @@ class GraphAppGUI(tk.Frame):
 
         m = tk.Menu(self.menuBar)
         self.menuBar.add_cascade(label='Grafo', menu=m)
-        m.add_command(label='Abrir graphml...', command=self._menuCmdOpenGraphml)
-        m.add_command(label='Remover...', command=self._menuCmdRemoveGraph)
+        m.add_command(label='Abrir graphml...', command=self.menuCmdOpenGraphml)
+        m.add_command(label='Abrir CSV...', command=self.menuCmdOpenCsvEdges)
+        m.add_command(label='Remover...', command=self.menuCmdRemoveGraph)
 
-    def _menuCmdOpenGraphml(self):
-        dialog = OpenGraphmlDialog(self, self.control, title="Abrir graphml")
+    def menuCmdOpenGraphml(self):
+        dialog = OpenGraphmlDialog(self, self.control)
 
-    def _menuCmdRemoveGraph(self):
+    def menuCmdOpenCsvEdges(self):
+        dialog = OpenCsvEdgesDialog(self, self.control)
+
+    def menuCmdRemoveGraph(self):
         items = sorted(self.control.graphModels.keys())
         dialog = gui.ListSelectionDialog(self, title='Remoção de grafo',
             text='Selecione o grafo a ser removido', items=items)
@@ -378,21 +456,23 @@ class GraphAppGUI(tk.Frame):
                 self.control.removeGraph(selection)
 
 class OpenGraphmlDialog(Dialog):
-    def __init__(self, master, control, title=None):
+    def __init__(self, master, control):
 
         self.control = control
         self.arqIn = tk.StringVar()
+        self.name = tk.StringVar()
+        self.name.set(control.generateNumericName())
         self.relationAttr = tk.StringVar()
         self.edgeAttrs = []
 
-        super().__init__(master, title)
+        super().__init__(master, 'Carregamento de Graphml')
 
     def body(self, master):
         master.columnconfigure(1, weight=1)
         nameLabel = ttk.Label(master, text='Nome para o grafo:')
         nameLabel.grid(row=0, column=0, sticky=tk.EW)
-        self.nameEntry = ttk.Entry(master)
-        self.nameEntry.grid(row=0, column=1, columnspan=2, sticky=tk.EW)
+        nameEntry = ttk.Entry(master, textvariable=self.name)
+        nameEntry.grid(row=0, column=1, columnspan=2, sticky=tk.EW)
 
         fileLabel = ttk.Label(master, text='Arquivo:')
         fileLabel.grid(row=1, column=0, sticky=tk.EW)
@@ -412,14 +492,14 @@ class OpenGraphmlDialog(Dialog):
 
         master.pack(expand=True, fill='both')
 
-        return self.nameEntry
+        return nameEntry
 
     def _doBtnFileOpen(self):
-        fileName = tk.filedialog.askopenfilename(
+        filename = tk.filedialog.askopenfilename(
             filetypes=[('graphml','*.graphml')])
-        if fileName != '':
-            self.arqIn.set(fileName)
-            _,_,edgeAttrs = self.control.inspectGraphmlAttributes(fileName)
+        if filename != '':
+            self.arqIn.set(filename)
+            _,_,edgeAttrs = self.control.inspectGraphmlAttributes(filename)
             self.edgeAttrs = sorted(edgeAttrs.keys())
             self.relationButton['state'] = tk.NORMAL
 
@@ -439,16 +519,183 @@ class OpenGraphmlDialog(Dialog):
         if len(relation) == 0:
             relation = None
 
-        fileName = self.arqIn.get().strip()
-        name = self.nameEntry.get().strip()
+        filename = self.arqIn.get().strip()
+        name = self.name.get().strip()
         if len(name) == 0:
             name = None
 
-        ok, errmsg = self.control.loadGraphml(fileName, name, relation)
+        try:
+            self.control.loadGraphml(filename, name, relation)
+        except Exception as ex:
+            errmsg = str(ex)
+            self.control.logger.error(errmsg)
+            trace = traceback.format_exc()
+            self.control.logger.debug(trace)
+            tk.messagebox.showerror('Erro',
+                textwrap.fill('Falha no carregamento: '+
+                    errmsg, 50))
 
-        if not ok:
-            tk.messagebox.showerror('Erro', errmsg)
+class OpenCsvEdgesDialog(Dialog):
+    def __init__(self, master, control):
 
+        self.control = control
+        self.arqIn = tk.StringVar()
+        self.name = tk.StringVar()
+        self.name.set(control.generateNumericName())
+        self.hasHeadingRow = tk.BooleanVar()
+        self.hasHeadingRow.set(True)
+        self.srcCol = tk.IntVar()
+        self.srcCol.set(0)
+        self.tgtCol = tk.IntVar()
+        self.tgtCol.set(1)
+        self.relCol = tk.IntVar()
+        self.relCol.set(-1)
+        self.weightCol = tk.IntVar()
+        self.weightCol.set(-1)
+
+        self.colHeadings = []
+
+        super().__init__(master, 'Carregamento de CSV de arestas')
+
+    def body(self, master):
+        master.columnconfigure(1, weight=1)
+        row = 0
+
+        nameLabel = ttk.Label(master, text='Nome para o grafo:')
+        nameLabel.grid(row=row, column=0, sticky=tk.E)
+        nameEntry = ttk.Entry(master, textvariable=self.name)
+        nameEntry.grid(row=row, column=1, columnspan=2, sticky=tk.EW)
+        row += 1
+
+        headingsLabel = ttk.Label(master, text='A primeia linha é cabeçalho:')
+        headingsLabel.grid(row=row, column=0, sticky=tk.E)
+        headingsCheck = ttk.Checkbutton(master, variable=self.hasHeadingRow)
+        headingsCheck.grid(row=row, column=1, sticky=tk.W)
+        row += 1
+
+        fileLabel = ttk.Label(master, text='Arquivo:')
+        fileLabel.grid(row=row, column=0, sticky=tk.E)
+        fileEntry = ttk.Entry(master, textvariable=self.arqIn)
+        fileEntry.grid(row=row, column=1, sticky=tk.EW)
+        fileButton = ttk.Button(master, text='Abrir...',
+            command=self._doBtnFileOpen)
+        fileButton.grid(row=row, column=2, sticky=tk.EW)
+        row += 1
+
+        srcLabel = ttk.Label(master, text='Coluna do nodo de origem:')
+        srcLabel.grid(row=row, column=0, sticky=tk.E)
+        srcValLabel = ttk.Label(master, textvariable=self.srcCol)
+        srcValLabel.grid(row=row, column=1, sticky=tk.W)
+        self.srcButton = ttk.Button(master, text='Escolher...',
+            command=self._doBtnChooseSrc, state=tk.DISABLED)
+        self.srcButton.grid(row=row, column=2, sticky=tk.EW)
+        row += 1
+
+        tgtLabel = ttk.Label(master, text='Coluna do nodo de destino:')
+        tgtLabel.grid(row=row, column=0, sticky=tk.E)
+        tgtValLabel = ttk.Label(master, textvariable=self.tgtCol)
+        tgtValLabel.grid(row=row, column=1, sticky=tk.W)
+        self.tgtButton = ttk.Button(master, text='Escolher...',
+            command=self._doBtnChooseTgt, state=tk.DISABLED)
+        self.tgtButton.grid(row=row, column=2, sticky=tk.EW)
+        row += 1
+
+        relLabel = ttk.Label(master, text='Coluna da relação:')
+        relLabel.grid(row=row, column=0, sticky=tk.E)
+        relValLabel = ttk.Label(master, textvariable=self.relCol)
+        relValLabel.grid(row=row, column=1, sticky=tk.W)
+        self.relButton = ttk.Button(master, text='Escolher...',
+            command=self._doBtnChooseRelation, state=tk.DISABLED)
+        self.relButton.grid(row=row, column=2, sticky=tk.EW)
+        row += 1
+
+        weightLabel = ttk.Label(master, text='Coluna do peso:')
+        weightLabel.grid(row=row, column=0, sticky=tk.E)
+        weightValLabel = ttk.Label(master, textvariable=self.weightCol)
+        weightValLabel.grid(row=row, column=1, sticky=tk.W)
+        self.weightButton = ttk.Button(master, text='Escolher...',
+            command=self._doBtnChooseWeight, state=tk.DISABLED)
+        self.weightButton.grid(row=row, column=2, sticky=tk.EW)
+        row += 1
+
+        master.pack(expand=True, fill='both')
+
+        return nameEntry
+
+    def _doBtnFileOpen(self):
+        filename = tk.filedialog.askopenfilename(
+            filetypes=[('CSV','*.csv'),('TSV','*.tsv')])
+        if filename != '':
+            self.arqIn.set(filename)
+            self.colHeadings = self.control.inspectCsv(filename)
+            self.srcButton['state'] = tk.NORMAL
+            self.tgtButton['state'] = tk.NORMAL
+            self.relButton['state'] = tk.NORMAL
+            self.weightButton['state'] = tk.NORMAL
+
+    def _chooseColumn(self, var, title, text, required=True):
+
+        if self.hasHeadingRow.get():
+            items = ['{0}: {1}'.format(i,n) for i,n in enumerate(self.colHeadings)]
+        else:
+            items = ['{0}'.format(i) for i in range(len(self.colHeadings))]
+
+        idxShift = 0
+        if not required:
+            items = ['-1: <nenhuma>'] + items
+            idxShift += 1
+
+        dialog = gui.ListSelectionDialog(self, title=title,
+            text=textwrap.fill(text,40), items=items)
+
+        if dialog.result is not None:
+            for i, _ in dialog.result:
+                var.set(i - idxShift)
+                break
+
+    def _doBtnChooseSrc(self):
+        self._chooseColumn(self.srcCol,
+            'Coluna do nodo de origem',
+            'Selecione a coluna que indica o nodo de origem da aresta.',
+            True)
+
+    def _doBtnChooseTgt(self):
+        self._chooseColumn(self.tgtCol,
+            'Coluna do nodo de destino',
+            'Selecione a coluna que indica o nodo de destino da aresta.',
+            True)
+
+    def _doBtnChooseWeight(self):
+        self._chooseColumn(self.weightCol,
+            'Coluna de peso da aresta',
+            'Selecione a coluna que indica o peso da aresta.',
+            False)
+
+    def _doBtnChooseRelation(self):
+        self._chooseColumn(self.relCol,
+            'Coluna de relação da aresta',
+            'Selecione a coluna que indica a qual relação ' +
+            'a aresta pertence (tipo da aresta).',
+            False)
+
+    def apply(self):
+        filename = self.arqIn.get().strip()
+        name = self.name.get().strip()
+        if len(name) == 0:
+            name = None
+
+        try:
+            self.control.loadCsvGraphEdges(filename,
+                self.srcCol.get(), self.tgtCol.get(), name,
+                self.relCol.get(), self.weightCol.get(),
+                self.hasHeadingRow.get())
+        except Exception as ex:
+            errmsg = str(ex)
+            self.control.logger.error(errmsg)
+            trace = traceback.format_exc()
+            self.control.logger.debug(trace)
+            tk.messagebox.showerror('Erro',
+                'Falha no carregamento:\n\n'+ errmsg)
 
 #---------------------------------------------------------------------
 # Execução do script
