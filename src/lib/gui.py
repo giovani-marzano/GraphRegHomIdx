@@ -106,6 +106,13 @@ class ListSelecOneFrame(ttk.Frame):
 
         return sel
 
+    def setSelection(self, item):
+        try:
+            idx = self._items.index(item)
+            self.listBox.selection_set(idx)
+        except ValueError:
+            pass
+
 class ListSelecManyFrame(ttk.Frame):
     def __init__(self, master, filterText='',
             selectmode=tk.BROWSE, **options):
@@ -284,6 +291,7 @@ class ListSelectionDialog(Dialog):
         self._text = text
         self._items = items
         self._filterText = filterText
+        self._initialSelection = selected
         self.result = None
 
         super().__init__(parent, title)
@@ -297,6 +305,9 @@ class ListSelectionDialog(Dialog):
 
         self._selFrame.setItems(self._items)
         self._selFrame.pack(side='bottom', expand=True, fill='both')
+
+        if self._initialSelection is not None:
+            self._selFrame.setSelection(self._initialSelection)
 
         master.pack(expand=True, fill='both')
 
