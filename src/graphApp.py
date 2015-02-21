@@ -59,6 +59,13 @@ class GraphModel(object):
         self.name = name
         self.filename = filename
 
+    def createGraphmlFilename(self):
+        if self.filename:
+            path, _ = os.path.splitext(self.filename)
+            return path + '.graphml'
+        else:
+            return self.name + '.graphml'
+
 class GraphAppControl(object):
     def __init__(self, logger):
         self.logger = logger
@@ -141,7 +148,7 @@ class GraphAppControl(object):
         return name
 
     def insertGraph(self, g, name=None, filename=None):
-        if name is None:
+        if name is None or name == '':
             name = self.generateNumericName()
 
         if name in self.graphModels:
@@ -227,6 +234,8 @@ class GraphAppControl(object):
 
             spec = gr.AttrSpec(weightAttr, 'float', 1.0)
             g.addEdgeAttrSpec(spec)
+            spec = gr.AttrSpec(relationAttr, 'string')
+            g.addEdgeAttrSpec(spec)
 
             for row in reader:
                 src = row[srcNodeCol].strip()
@@ -245,10 +254,27 @@ class GraphAppControl(object):
                 else:
                     g.addEdge(src, tgt, rel)
                     g.setEdgeAttr((src,tgt,rel), weightAttr, weigth)
+                    g.setEdgeAttr((src,tgt,rel), relationAttr, rel)
             # end for
         #end with
 
         self.insertGraph(g, name, filename)
+
+    def saveGraphml(self, name, filename=None):
+        gmod = self.graphModels[name]
+
+        if not filename:
+            filename = gmod.createGraphmlFilename()
+
+        gmod.graph.writeGraphml(filename)
+
+        gmod.filename = filename
+
+        self._callChangeHandlers(gmod)
+
+    def newEmptyGraph(self, name):
+        g = gr.MultiGraph()
+        self.insertGraph(g, name)
 
 #---------------------------------------------------------------------
 # Classes GUI
@@ -350,9 +376,10 @@ class GraphAppGUI(tk.Frame):
             self.removeGraphView(iid)
 
         # (Re)inserting the graph
+        filename = graphModel.filename or ''
         iid = self.graphTree.insert('', pos,
             text=graphModel.name,
-            values=(graphModel.filename, 'graph'))
+            values=(filename, 'graph'))
 
         self.iidToGraph[iid] = graphModel
         self.graphToIid[graphModel] = iid
@@ -430,6 +457,13 @@ class GraphAppGUI(tk.Frame):
 
         return iid
 
+    def getSelectedGraph(self):
+        iid = self.getSelectedGraphIid()
+        if iid is not None:
+            return self.iidToGraph[iid]
+        else:
+            return None
+
     def _createMenu(self):
         top = self.winfo_toplevel()
         self.menuBar = tk.Menu(top)
@@ -437,9 +471,14 @@ class GraphAppGUI(tk.Frame):
 
         m = tk.Menu(self.menuBar)
         self.menuBar.add_cascade(label='Grafo', menu=m)
+        m.add_command(label='Novo...', command=self.menuCmdNewGraph)
         m.add_command(label='Abrir graphml...', command=self.menuCmdOpenGraphml)
         m.add_command(label='Abrir CSV...', command=self.menuCmdOpenCsvEdges)
+        m.add_command(label='Salvar graphml...', command=self.menuCmdSaveGraphml)
         m.add_command(label='Remover...', command=self.menuCmdRemoveGraph)
+
+    def menuCmdNewGraph(self):
+        dialog = NewGraphDialog(self, self.control)
 
     def menuCmdOpenGraphml(self):
         dialog = OpenGraphmlDialog(self, self.control)
@@ -454,6 +493,68 @@ class GraphAppGUI(tk.Frame):
         if dialog.result is not None:
             for i, selection in dialog.result:
                 self.control.removeGraph(selection)
+
+    def menuCmdSaveGraphml(self):
+        items = sorted(self.control.graphModels.keys())
+        selected = self.getSelectedGraph()
+        if selected is not None:
+            selected = selected.name
+        dialog = gui.ListSelectionDialog(self, title='Salvamento de grafo',
+            text='Selecione o grafo a ser salvo como graphml', items=items,
+            selected=selected)
+
+        gmod = None
+        if dialog.result is not None:
+            for _, name in dialog.result:
+                gmod = self.control.graphModels[name]
+                break
+
+        if gmod is not None:
+            filename = gmod.createGraphmlFilename()
+            dirpath, basename = os.path.split(filename)
+
+            filename = tk.filedialog.asksaveasfilename(
+                filetypes=[('graphml','*.graphml')],
+                defaultextension='.graphml',
+                initialfile=basename,
+                initialdir=dirpath
+                )
+            if filename:
+                self.control.saveGraphml(gmod.name, filename)
+
+class NewGraphDialog(Dialog):
+    def __init__(self, master, control):
+
+        self.control = control
+        self.name = tk.StringVar()
+        self.name.set(control.generateNumericName())
+
+        super().__init__(master, 'Novo grafo vazio')
+
+    def body(self, master):
+        master.columnconfigure(1, weight=1)
+        nameLabel = ttk.Label(master, text='Nome para o grafo:')
+        nameLabel.grid(row=0, column=0, sticky=tk.EW)
+        nameEntry = ttk.Entry(master, textvariable=self.name)
+        nameEntry.grid(row=0, column=1, columnspan=2, sticky=tk.EW)
+
+        master.pack(expand=True, fill='both')
+
+        return nameEntry
+
+    def apply(self):
+        try:
+            name = self.name.get().strip()
+            self.control.newEmptyGraph(name)
+        except Exception as ex:
+            errmsg = str(ex)
+            self.control.logger.error(errmsg)
+            trace = traceback.format_exc()
+            self.control.logger.debug(trace)
+            tk.messagebox.showerror('Erro',
+                textwrap.fill('Falha na criação: '+
+                    errmsg, 50))
+
 
 class OpenGraphmlDialog(Dialog):
     def __init__(self, master, control):
