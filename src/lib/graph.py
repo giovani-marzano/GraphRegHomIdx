@@ -513,7 +513,8 @@ class AttrSpec(object):
     def __init__(self, attr_name, attr_type, default=None):
         self.name = attr_name
         self.type = attr_type
-        self.default = default
+
+        self.setDefault(default)
 
     def strToType(self, strValue):
         if self.type == 'float' or self.type == 'double':
@@ -691,15 +692,8 @@ def agregateClassAttr(gOri, nodeClassAttr=None, edgeClassAttr=None, nodeAttrs=No
 
     return nodeAttrDicts, edgeAttrDicts, nodeSpecs, edgeSpecs
 
-def addAtributeSetsToGraph(g, attrNodes, attrEdges, specNodes, specEdges):
-    if attrNodes is None:
-        attrNodes = {}
-    if attrEdges is None:
-        attrEdges = {}
-    if specNodes is None:
-        specNodes = []
-    if specEdges is None:
-        specEdges = []
+def addAttributeSetsToGraph(g, attrNodes={}, specNodes=[],
+        attrEdges={}, specEdges=[]):
 
     for spec in specNodes:
         g.addNodeAttrSpec(spec)

@@ -285,8 +285,9 @@ def processaGrafoAgregadoComSOM(g, log, nodeInterations, edgeInterations):
         nodeClassAttr='SOM_class', edgeClassAttr='SOM_class',
         nodeAttrs=nodeInterations, edgeAttrs=edgeInterations)
 
-    gr.addAtributeSetsToGraph(gclass, attrNodes, attrEdges, specNodes,
-            specEdges)
+    gr.addAttributeSetsToGraph(gclass,
+        attrNodes=attrNodes, specNodes=specNodes,
+        attrEdges=attrEdges, specEdges=specEdges)
 
     log.info("Salvando '{}': {} nodos e {} arestas...".format(ARQ_CLASSES_SOM,
                 gclass.getNumNodes(), gclass.getNumEdges()))
