@@ -67,6 +67,7 @@ class GraphModel(object):
             return self.name + '.graphml'
 
 class GraphAppControl(object):
+
     def __init__(self, logger):
         self.logger = logger
         self.csvDialect = csv.excel()
@@ -276,12 +277,103 @@ class GraphAppControl(object):
         g = gr.MultiGraph()
         self.insertGraph(g, name)
 
+    def readIdsAndAttrsFromCsv(filename, idCols,
+            attrCols, attrSpecs,
+            firstRowIsHeading):
+
+        if len(idCols) > 1:
+            def extractId(row, num):
+                ids = []
+                for c in idCols:
+                    ids.append(row[c])
+                return tuple(ids)
+
+        elif len(idCols) == 1:
+            def extractId(row, num):
+                return row[idCols[0]]
+        else:
+            def extractId(row, num):
+                return num
+
+        with open(filename, newline='') as f:
+            reader = csv.reader(f, self.csvDialect)
+
+            attrDicts = {}
+            for spec in attrSpecs:
+                attrDicts[spec.name] = {}
+
+            if firstRowIsHeading:
+                for row in reader:
+                    break
+
+            itemNum = 1
+            for row in reader:
+                ids = extractId(row, itemNum)
+                for i, spec in attrSpecs:
+                    value = row[attrCols[i]]
+                    value = spec.strToType(value)
+                    attrDicts[spec.name][ids] = value
+                itemNum += 1
+
+        return attrDicts
+
+    def importNodeAttrsFromCsv(graphName, filename, nodeCol,
+            attrCols, attrSpecs,
+            firstRowIsHeading):
+
+        if graphName not in self.graphModels.keys():
+            raise ValueError(
+                "Grafo '{0}' não existe".format(graphName))
+
+        gmod = self.graphModels[graphName]
+
+        attrNames = gmod.graph.getNodeAttrNames()
+        for spec in attrSpecs:
+            if spec.name in attrNames:
+                raise ValueError(
+                    "Já existe atributo de nodo com nome '{0}'".format(spec.name))
+
+        idCols = [nodeCol]
+        attrDicts = readIdsAndAttrsFromCsv(filename, idCols, attrCols,
+            attrSpecs, firstRowIsHeading)
+
+        gr.addAttributeSetsToGraph(gmod.graph,
+            attrNodes=attrDicts, specNodes=attrSpecs)
+
+        self._callChangeHandlers(gmod)
+
+    def importEdgeAttrsFromCsv(graphName, filename,
+            srcCol, tgtCol, relCol,
+            attrCols, attrSpecs,
+            firstRowIsHeading):
+
+        if graphName not in self.graphModels.keys():
+            raise ValueError(
+                "Grafo '{0}' não existe".format(graphName))
+
+        gmod = self.graphModels[graphName]
+
+        attrNames = gmod.graph.getEdgeAttrNames()
+        for spec in attrSpecs:
+            if spec.name in attrNames:
+                raise ValueError(
+                    "Já existe atributo de aresta com nome '{0}'".format(spec.name))
+
+        idCols = [srcCol, tgtCol, relCol]
+        attrDicts = readIdsAndAttrsFromCsv(filename, idCols, attrCols,
+            attrSpecs, firstRowIsHeading)
+
+        gr.addAttributeSetsToGraph(gmod.graph,
+            attrEdges=attrDicts, specEdges=attrSpecs)
+
+        self._callChangeHandlers(gmod)
+
 #---------------------------------------------------------------------
 # Classes GUI
 #---------------------------------------------------------------------
 import tkinter as tk
-import tkinter.filedialog as filedialog
-import tkinter.messagebox as messagebox
+import tkinter.filedialog
+import tkinter.messagebox
 import tkinter.ttk as ttk
 from tkinter.simpledialog import Dialog
 import gui
@@ -311,6 +403,9 @@ class GraphAppGUI(tk.Frame):
         graphTree.grid(row=0, column=0, sticky=tk.NSEW)
         scrollbarX.grid(row=1, column=0, sticky=tk.EW)
         scrollbarY.grid(row=0, column=1, sticky=tk.NS)
+
+        sizegrip = ttk.Sizegrip(self)
+        sizegrip.grid(row=1, column=1, sticky=tk.NSEW)
 
         self.graphTree = graphTree
 
@@ -470,12 +565,60 @@ class GraphAppGUI(tk.Frame):
         top['menu'] = self.menuBar
 
         m = tk.Menu(self.menuBar)
-        self.menuBar.add_cascade(label='Grafo', menu=m)
-        m.add_command(label='Novo...', command=self.menuCmdNewGraph)
+        self.menuBar.add_cascade(label='Arquivo', menu=m)
         m.add_command(label='Abrir graphml...', command=self.menuCmdOpenGraphml)
         m.add_command(label='Abrir CSV...', command=self.menuCmdOpenCsvEdges)
         m.add_command(label='Salvar graphml...', command=self.menuCmdSaveGraphml)
+        m.add_separator()
+        m.add_command(label='Sair', command=self.menuCmdQuit)
+
+        m = tk.Menu(self.menuBar)
+        self.menuBar.add_cascade(label='Grafo', menu=m)
+        m.add_command(label='Novo...', command=self.menuCmdNewGraph)
         m.add_command(label='Remover...', command=self.menuCmdRemoveGraph)
+        m.add_separator()
+        m.add_command(label='#Adicionar atributo...',
+            command=self.menuCmdNotImplemented)
+        m.add_command(label='#Remover atributo...',
+            command=self.menuCmdNotImplemented)
+        m.add_separator()
+        m.add_command(label='#Morfismo cheio...',
+            command=self.menuCmdNotImplemented)
+
+        m = tk.Menu(self.menuBar)
+        self.menuBar.add_cascade(label='Nodos', menu=m)
+        m.add_command(label='#Importar atributos de csv...',
+            command=self.menuCmdNotImplemented)
+        m.add_command(label='#Exportar atributos para csv...',
+            command=self.menuCmdNotImplemented)
+        m.add_command(label='#Remover atributos...',
+            command=self.menuCmdNotImplemented)
+        m.add_separator()
+        m.add_command(label='#Remover nodos...',
+            command=self.menuCmdNotImplemented)
+        m.add_separator()
+        m.add_command(label='#Classificar por equivalência regular...',
+            command=self.menuCmdNotImplemented)
+
+        m = tk.Menu(self.menuBar)
+        self.menuBar.add_cascade(label='Arestas', menu=m)
+        m.add_command(label='#Importar atributos de csv...',
+            command=self.menuCmdNotImplemented)
+        m.add_command(label='#Exportar atributos para csv...',
+            command=self.menuCmdNotImplemented)
+        m.add_command(label='#Remover atributos...',
+            command=self.menuCmdNotImplemented)
+        m.add_separator()
+        m.add_command(label='#Remover arestas...',
+            command=self.menuCmdNotImplemented)
+
+    def menuCmdNotImplemented(self):
+        d = AttributeConfigDialog(self, 7)
+        tk.messagebox.showinfo('Não implementado',
+            'Funcionalidade ainda não implementada')
+
+    def menuCmdQuit(self):
+        self.quit()
 
     def menuCmdNewGraph(self):
         dialog = NewGraphDialog(self, self.control)
@@ -488,8 +631,12 @@ class GraphAppGUI(tk.Frame):
 
     def menuCmdRemoveGraph(self):
         items = sorted(self.control.graphModels.keys())
+        selected = self.getSelectedGraph()
+        if selected is not None:
+            selected = selected.name
         dialog = gui.ListSelectionDialog(self, title='Remoção de grafo',
-            text='Selecione o grafo a ser removido', items=items)
+            text='Selecione o grafo a ser removido', items=items,
+            selected=selected)
         if dialog.result is not None:
             for i, selection in dialog.result:
                 self.control.removeGraph(selection)
@@ -521,6 +668,110 @@ class GraphAppGUI(tk.Frame):
                 )
             if filename:
                 self.control.saveGraphml(gmod.name, filename)
+
+class AttributeConfigFrame(ttk.Frame):
+    def __init__(self, master, numAttrs, **options):
+        super().__init__(master, **options)
+
+        self._numAttrs = numAttrs
+        self.labels = [tk.StringVar() for i in range(numAttrs)]
+        self.names = [tk.StringVar() for i in range(numAttrs)]
+        self.types = [tk.StringVar() for i in range(numAttrs)]
+        self.defaults = [tk.StringVar() for i in range(numAttrs)]
+
+        self._createAttrGrid()
+
+        # Setando os tipos para string por default
+        for v in self.types:
+            v.set('string')
+
+        # Labels sequenciais por default
+        for i in range(numAttrs):
+            self.labels[i].set('{0:02}:'.format(i))
+
+    def _createAttrGrid(self):
+        typeNames = sorted(gr.AttrSpec.VALID_TYPES)
+
+        self.columnconfigure(1, weight=1)
+        self.columnconfigure(3, weight=1)
+
+        row = 0
+        ws = []
+        ws.append(ttk.Label(self, text=''))
+        ws.append(ttk.Label(self, text='Nome'))
+        ws.append(ttk.Label(self, text='Tipo'))
+        ws.append(ttk.Label(self, text='Default'))
+        for col,w in enumerate(ws):
+            w.grid(row=row, column=col, sticky=tk.EW)
+        row += 1
+
+        for i in range(self._numAttrs):
+            ws = []
+            ws.append(ttk.Label(self, textvariable=self.labels[i]))
+            ws.append(ttk.Entry(self, textvariable=self.names[i]))
+            ws.append(ttk.Combobox(self, textvariable=self.types[i],
+                    values=typeNames, state='readonly'))
+            ws.append(ttk.Entry(self, textvariable=self.defaults[i]))
+            for col,w in enumerate(ws):
+                w.grid(row=row, column=col, sticky=tk.EW)
+            row += 1
+
+    def setLabels(self, labels):
+        for i, v in enumerate(labels):
+            self.labels[i].set(v)
+
+    def setNames(self, names):
+        for i, v in enumerate(names):
+            self.names[i].set(v)
+
+    def setTypes(self, types):
+        for i, v in enumerate(types):
+            self.types[i].set(v)
+
+    def generateSpecs(self):
+        specs = []
+        for i in range(self._numAttrs):
+            n = self.labels[i].get().strip()
+            t = self.types[i].get()
+            d = self.defaults[i].get().strip()
+            if d == '':
+                d = None
+            specs.append(gr.AttrSpec(n,t,d))
+        return specs
+
+class AttributeConfigDialog(Dialog):
+    def __init__(self, master, numAttrs):
+
+        self._numAttrs = numAttrs
+
+        super().__init__(master, 'Configuração de atributos')
+
+    def body(self, master):
+        self.confFrame = AttributeConfigFrame(master, self._numAttrs)
+        self.confFrame.pack(expand=True, fill='both')
+
+        master.pack(expand=True, fill='both')
+
+    def apply(self):
+        pass
+
+    def validate(self):
+        labels = []
+        for i in range(self._numAttrs):
+            labels.append('{0:02} col {1} '.format(i, i+4))
+        self.confFrame.setLabels(labels)
+        return False
+
+class TestDialog(Dialog):
+    def __init__(self, master):
+
+        super().__init__(master, 'Teste')
+
+    def body(self, master):
+        f = AttributeConfigFrame(master, 15)
+        f.pack()
+
+        return f
 
 class NewGraphDialog(Dialog):
     def __init__(self, master, control):
@@ -725,7 +976,7 @@ class OpenCsvEdgesDialog(Dialog):
 
     def _doBtnFileOpen(self):
         filename = tk.filedialog.askopenfilename(
-            filetypes=[('CSV','*.csv'),('TSV','*.tsv')])
+            filetypes=[('csv','*.csv'),('txt','*.txt'),('all','*')])
         if filename != '':
             self.arqIn.set(filename)
             self.colHeadings = self.control.inspectCsv(filename)
