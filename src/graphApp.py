@@ -281,7 +281,7 @@ class GraphAppControl(object):
         g = gr.MultiGraph()
         self.insertGraph(g, name)
 
-    def readIdsAndAttrsFromCsv(filename, idCols,
+    def readIdsAndAttrsFromCsv(self, filename, idCols,
             attrCols, attrSpecs,
             firstRowIsHeading):
 
@@ -313,7 +313,7 @@ class GraphAppControl(object):
             itemNum = 1
             for row in reader:
                 ids = extractId(row, itemNum)
-                for i, spec in attrSpecs:
+                for i, spec in enumerate(attrSpecs):
                     value = row[attrCols[i]]
                     value = spec.strToType(value)
                     attrDicts[spec.name][ids] = value
@@ -321,7 +321,7 @@ class GraphAppControl(object):
 
         return attrDicts
 
-    def importNodeAttrsFromCsv(graphName, filename, nodeCol,
+    def importNodeAttrsFromCsv(self, graphName, filename, nodeCol,
             attrCols, attrSpecs,
             firstRowIsHeading):
 
@@ -338,7 +338,7 @@ class GraphAppControl(object):
                     "Já existe atributo de nodo com nome '{0}'".format(spec.name))
 
         idCols = [nodeCol]
-        attrDicts = readIdsAndAttrsFromCsv(filename, idCols, attrCols,
+        attrDicts = self.readIdsAndAttrsFromCsv(filename, idCols, attrCols,
             attrSpecs, firstRowIsHeading)
 
         gr.addAttributeSetsToGraph(gmod.graph,
@@ -346,7 +346,7 @@ class GraphAppControl(object):
 
         self._callChangeHandlers(gmod)
 
-    def importEdgeAttrsFromCsv(graphName, filename,
+    def importEdgeAttrsFromCsv(self, graphName, filename,
             srcCol, tgtCol, relCol,
             attrCols, attrSpecs,
             firstRowIsHeading):
@@ -364,7 +364,7 @@ class GraphAppControl(object):
                     "Já existe atributo de aresta com nome '{0}'".format(spec.name))
 
         idCols = [srcCol, tgtCol, relCol]
-        attrDicts = readIdsAndAttrsFromCsv(filename, idCols, attrCols,
+        attrDicts = self.readIdsAndAttrsFromCsv(filename, idCols, attrCols,
             attrSpecs, firstRowIsHeading)
 
         gr.addAttributeSetsToGraph(gmod.graph,
@@ -652,7 +652,7 @@ class GraphAppGUI(tk.Frame):
 
         m = tk.Menu(self.menuBar)
         self.menuBar.add_cascade(label='Nodos', menu=m)
-        m.add_command(label='#Importar atributos de csv...',
+        m.add_command(label='Importar atributos de csv...',
             command=self.menuCmdImportNodeAttr)
         m.add_command(label='#Exportar atributos para csv...',
             command=self.menuCmdNotImplemented)
@@ -667,7 +667,7 @@ class GraphAppGUI(tk.Frame):
 
         m = tk.Menu(self.menuBar)
         self.menuBar.add_cascade(label='Arestas', menu=m)
-        m.add_command(label='#Importar atributos de csv...',
+        m.add_command(label='Importar atributos de csv...',
             command=self.menuCmdImportEdgeAttr)
         m.add_command(label='#Exportar atributos para csv...',
             command=self.menuCmdNotImplemented)
@@ -898,6 +898,13 @@ def createOptionsCsvColumnSelection(colHeadings, hasHeadindRow=True,
 
     return items, idxShift
 
+def showExceptionMsg(exception, text, logger):
+    errmsg = str(exception)
+    logger.error(errmsg)
+    trace = traceback.format_exc()
+    logger.debug(trace)
+    tk.messagebox.showerror('Erro',
+            text+'\n\n'+errmsg)
 
 class ImportAttributesDialog(Dialog):
     def __init__(self, master, control, attrScope, selectedGraph=''):
@@ -917,6 +924,22 @@ class ImportAttributesDialog(Dialog):
         self.attrColsTxt = tk.StringVar()
 
         self.attrSpecs = []
+
+        if attrScope == 'edge':
+            self.idLabelTexts = ['Coluna de origem da aresta',
+                'Coluna de destino da aresta',
+                'Coluna da relação da aresta']
+            self.idSelectionTexts=[
+                'Selecione a coluna que representa o nodo de origem da aresta.',
+                'Selecione a coluna que representa o nodo de destino da aresta.',
+                'Selecione a coluna que representa a relação da aresta.'
+            ]
+        elif attrScope == 'node':
+            self.idLabelTexts = ['Coluna do nodo']
+            self.idSelectionTexts=[
+                'Selecione a coluna que representa o identificador do nodo.'
+            ]
+
 
         super().__init__(master, 'Importação de atributos')
 
@@ -943,22 +966,7 @@ class ImportAttributesDialog(Dialog):
         cb.grid(row=row, column=0, sticky=tk.E)
         row += 1
 
-        if self.attrScope == 'edge':
-            row = self._createIdColsGui(master, row, labelwidth,
-                ['Coluna de origem da aresta:',
-                    'Coluna de destino da aresta:',
-                    'Coluna da relação da aresta:'])
-            self.idSelectionTexts=[
-                'Selecione a coluna que representa o nodo de origem da aresta.',
-                'Selecione a coluna que representa o nodo de destino da aresta.',
-                'Selecione a coluna que representa a relação da aresta.'
-            ]
-        elif self.attrScope == 'node':
-            row = self._createIdColsGui(master, row, labelwidth,
-                ['Coluna do nodo:'])
-            self.idSelectionTexts=[
-                'Selecione a coluna que representa o identificador do nodo.'
-            ]
+        row = self._createIdColsGui(master, row, labelwidth, self.idLabelTexts)
 
         lb = ttk.Label(master, text='Colunas de atributos:',
                 justify=tk.RIGHT, anchor=tk.E)
@@ -990,7 +998,7 @@ class ImportAttributesDialog(Dialog):
 
         for i, text in enumerate(texts):
             var = tk.StringVar()
-            lb = ttk.Label(master, text=text, justify=tk.RIGHT,
+            lb = ttk.Label(master, text=text+':', justify=tk.RIGHT,
                     anchor=tk.E)
             entry = ttk.Entry(master, textvariable=var,
                     state='readonly')
@@ -1004,6 +1012,17 @@ class ImportAttributesDialog(Dialog):
             self.idCols.append(-1)
 
         return row
+
+    def _resetConfiguration(self):
+        for i in range(len(self.idCols)):
+            self.idCols[i] = -1
+
+        for var in self.idColsTxtVet:
+            var.set('')
+
+        self.attrCols = []
+        self.attrColsTxt.set('')
+        self.attrSpecs = []
 
     def _doBtnChooseGraph(self):
         graphs = self.control.getGraphNames()
@@ -1021,6 +1040,7 @@ class ImportAttributesDialog(Dialog):
         if filename:
             self.arqIn.set(filename)
             self.colHeadings = self.control.inspectCsv(filename)
+            self._resetConfiguration()
             self._updateButtonStates()
 
     def _doBtnChooseAttrCols(self):
@@ -1079,7 +1099,7 @@ class ImportAttributesDialog(Dialog):
         if self.hasHeadingRow.get():
             names = [self.colHeadings[c] for c in self.attrCols]
         else:
-            names = ['attr_{0}'.format[c] for c in self.attrCols]
+            names = ['attr_{0}'.format(c) for c in self.attrCols]
 
         dialog = AttributeConfigDialog(self,
             numAttrs=len(self.attrCols), attrScope=self.attrScope,
@@ -1089,8 +1109,49 @@ class ImportAttributesDialog(Dialog):
         if dialog.result:
             self.attrSpecs = dialog.attrSpecs
 
+    def validate(self):
+        isOk = True
+        errMsg = ''
+
+        if not self.graphName.get():
+            errMsg = 'O grafo que receberá os atributos não foi escolhido!'
+            isOk = False
+
+        for i, c in enumerate(self.idCols):
+            if isOk and c < 0:
+                errMsg = "O item '{0}' nao foi configurado!".format(
+                            self.idLabelTexts[i])
+                isOk = False
+                break
+
+        if isOk and not self.attrSpecs:
+            errMsg = 'Os atributos a serem importados não foram configurados!'
+            isOk = False
+
+        if not isOk:
+            tk.messagebox.showwarning('Problema na configuração',
+                errMsg)
+
+        return isOk
+
     def apply(self):
-        pass
+        try:
+            if self.attrScope == 'node':
+                self.control.importNodeAttrsFromCsv(
+                    graphName=self.graphName.get(), filename=self.arqIn.get(),
+                    nodeCol=self.idCols[0],
+                    attrCols=self.attrCols, attrSpecs=self.attrSpecs,
+                    firstRowIsHeading=self.hasHeadingRow.get())
+            elif self.attrScope == 'edge':
+                self.control.importEdgeAttrsFromCsv(
+                    graphName=self.graphName.get(), filename=self.arqIn.get(),
+                    srcCol=self.idCols[0], tgtCol=self.idCols[1],
+                    relCol=self.idCols[2],
+                    attrCols=self.attrCols, attrSpecs=self.attrSpecs,
+                    firstRowIsHeading=self.hasHeadingRow.get())
+        except Exception as ex:
+            showExceptionMsg(ex, 'Falha na importação de atributos',
+                self.control.logger)
 
 class TestDialog(Dialog):
     def __init__(self, master):
@@ -1363,18 +1424,22 @@ class OpenCsvEdgesDialog(Dialog):
         if len(name) == 0:
             name = None
 
+        relCol = self.relCol.get()
+        if relCol < 0:
+            relCol = None
+
+        weightCol = self.weightCol.get()
+        if weightCol < 0:
+            weightCol = None
+
         try:
             self.control.loadCsvGraphEdges(filename,
                 self.srcCol.get(), self.tgtCol.get(), name,
-                self.relCol.get(), self.weightCol.get(),
+                relCol, weightCol,
                 self.hasHeadingRow.get())
         except Exception as ex:
-            errmsg = str(ex)
-            self.control.logger.error(errmsg)
-            trace = traceback.format_exc()
-            self.control.logger.debug(trace)
-            tk.messagebox.showerror('Erro',
-                'Falha no carregamento:\n\n'+ errmsg)
+            showExceptionMsg(ex, 'Falha no carregamento',
+                self.control.logger)
 
 #---------------------------------------------------------------------
 # Execução do script
