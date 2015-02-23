@@ -6,6 +6,7 @@ import sys
 import logging
 import logging.config
 import traceback
+import math
 
 # Acrescentando o diretorio lib ao path. Lembrando que sys.path[0] representa o
 # diretório onde este script se encontra
@@ -147,6 +148,9 @@ class GraphAppControl(object):
             n += 1
             name = '{0:03}'.format(n)
         return name
+
+    def getGraphNames(self):
+        return sorted(self.graphModels.keys())
 
     def insertGraph(self, g, name=None, filename=None):
         if name is None or name == '':
@@ -368,6 +372,67 @@ class GraphAppControl(object):
 
         self._callChangeHandlers(gmod)
 
+    def validateNewAttrs(self, graphId, attrSpecs, attrScope):
+        """Verify if the specs are valid as new attributes for the given graph.
+
+        Args:
+            - graphId: Graph name or graph model
+            - attrSpecs: Sequence of AttrSpec
+            - attrScope: 'graph', 'node' or 'edge'
+
+        Return:
+            - (True, '')
+            - (False, errMsg)
+        """
+        if isinstance(graphId, str):
+            gmod = self.graphModels[graphId]
+        else:
+            gmod = graphId
+
+        if attrScope == 'graph':
+            attrNames = gmod.graph.getGraphAttrNames()
+        elif attrScope == 'node':
+            attrNames = gmod.graph.getNodeAttrNames()
+        elif attrScope == 'edge':
+            attrNames = gmod.graph.getEdgeAttrNames()
+        else:
+            raise ValueError("Invalid attrScope: '{0}'".format(
+                attrScope))
+
+        specNames = set()
+        repeatedNames = set()
+        for spec in attrSpecs:
+            if spec.name in specNames:
+                repeatedNames.add(spec.name)
+            else:
+                specNames.add(spec.name)
+
+        if '' in specNames:
+            return (False, 'Não é permitido nome de atributo vazio.')
+
+        if len(repeatedNames) > 0:
+            errMsg = 'Os seguintes nomes de atributos estão repetidos:'
+            ir = iter(repeatedNames)
+            for name in ir:
+                errMsg += ' '+name
+                break
+            for name in ir:
+                errMsg += ', '+name
+            return (False, errMsg)
+
+        if not specNames.isdisjoint(attrNames):
+            errMsg = 'O grafo já possue atributos com os seguintes nomes:'
+            common = specNames.intersection(attrNames)
+            ic = iter(common)
+            for name in ic:
+                errMsg += ' ' + name
+                break
+            for name in ic:
+                errMsg += ', ' + name
+            return (False, errMsg)
+
+        return (True,'')
+
 #---------------------------------------------------------------------
 # Classes GUI
 #---------------------------------------------------------------------
@@ -588,7 +653,7 @@ class GraphAppGUI(tk.Frame):
         m = tk.Menu(self.menuBar)
         self.menuBar.add_cascade(label='Nodos', menu=m)
         m.add_command(label='#Importar atributos de csv...',
-            command=self.menuCmdNotImplemented)
+            command=self.menuCmdImportNodeAttr)
         m.add_command(label='#Exportar atributos para csv...',
             command=self.menuCmdNotImplemented)
         m.add_command(label='#Remover atributos...',
@@ -603,7 +668,7 @@ class GraphAppGUI(tk.Frame):
         m = tk.Menu(self.menuBar)
         self.menuBar.add_cascade(label='Arestas', menu=m)
         m.add_command(label='#Importar atributos de csv...',
-            command=self.menuCmdNotImplemented)
+            command=self.menuCmdImportEdgeAttr)
         m.add_command(label='#Exportar atributos para csv...',
             command=self.menuCmdNotImplemented)
         m.add_command(label='#Remover atributos...',
@@ -613,9 +678,22 @@ class GraphAppGUI(tk.Frame):
             command=self.menuCmdNotImplemented)
 
     def menuCmdNotImplemented(self):
-        d = AttributeConfigDialog(self, 7)
+        d = AttributeConfigDialog(self, numAttrs=7, attrScope='edge',
+            control=self.control, graphName=list(self.graphToIid.keys())[0])
         tk.messagebox.showinfo('Não implementado',
             'Funcionalidade ainda não implementada')
+
+    def _cmdImportAttr(self, attrScope):
+        gsel = self.getSelectedGraph()
+        if gsel is not None:
+            gsel = gsel.name
+        d = ImportAttributesDialog(self, self.control, attrScope, gsel)
+
+    def menuCmdImportEdgeAttr(self):
+        self._cmdImportAttr('edge')
+
+    def menuCmdImportNodeAttr(self):
+        self._cmdImportAttr('node')
 
     def menuCmdQuit(self):
         self.quit()
@@ -700,7 +778,7 @@ class AttributeConfigFrame(ttk.Frame):
         ws.append(ttk.Label(self, text=''))
         ws.append(ttk.Label(self, text='Nome'))
         ws.append(ttk.Label(self, text='Tipo'))
-        ws.append(ttk.Label(self, text='Default'))
+        #ws.append(ttk.Label(self, text='Default'))
         for col,w in enumerate(ws):
             w.grid(row=row, column=col, sticky=tk.EW)
         row += 1
@@ -711,7 +789,7 @@ class AttributeConfigFrame(ttk.Frame):
             ws.append(ttk.Entry(self, textvariable=self.names[i]))
             ws.append(ttk.Combobox(self, textvariable=self.types[i],
                     values=typeNames, state='readonly'))
-            ws.append(ttk.Entry(self, textvariable=self.defaults[i]))
+            #ws.append(ttk.Entry(self, textvariable=self.defaults[i]))
             for col,w in enumerate(ws):
                 w.grid(row=row, column=col, sticky=tk.EW)
             row += 1
@@ -731,18 +809,26 @@ class AttributeConfigFrame(ttk.Frame):
     def generateSpecs(self):
         specs = []
         for i in range(self._numAttrs):
-            n = self.labels[i].get().strip()
+            n = self.names[i].get().strip()
             t = self.types[i].get()
-            d = self.defaults[i].get().strip()
-            if d == '':
-                d = None
+            #d = self.defaults[i].get().strip()
+            #if d == '':
+            #    d = None
+            d = None
             specs.append(gr.AttrSpec(n,t,d))
         return specs
 
 class AttributeConfigDialog(Dialog):
-    def __init__(self, master, numAttrs):
+    def __init__(self, master, numAttrs, attrScope, control, graphName,
+            labels=[], names=[], specs=[]):
 
         self._numAttrs = numAttrs
+        self.control = control
+        self.graph = graphName
+        self.attrScope = attrScope
+        self.labels = labels
+        self.names = names
+        self.attrSpecs = specs
 
         super().__init__(master, 'Configuração de atributos')
 
@@ -750,17 +836,261 @@ class AttributeConfigDialog(Dialog):
         self.confFrame = AttributeConfigFrame(master, self._numAttrs)
         self.confFrame.pack(expand=True, fill='both')
 
+        self.confFrame.setLabels(self.labels)
+        self.confFrame.setNames(self.names)
+
+        names = [s.name for s in self.attrSpecs]
+        types = [s.type for s in self.attrSpecs]
+
+        self.confFrame.setNames(names)
+        self.confFrame.setTypes(types)
+
         master.pack(expand=True, fill='both')
 
     def apply(self):
-        pass
+        self.result = True
 
     def validate(self):
-        labels = []
-        for i in range(self._numAttrs):
-            labels.append('{0:02} col {1} '.format(i, i+4))
-        self.confFrame.setLabels(labels)
-        return False
+        attrSpecs = self.confFrame.generateSpecs()
+        isOk, msg = self.control.validateNewAttrs(
+                graphId=self.graph, attrSpecs=attrSpecs,
+                attrScope=self.attrScope)
+
+        if not isOk:
+            tk.messagebox.showerror('Atributos inválidos', msg)
+        else:
+            self.attrSpecs = attrSpecs
+
+        return isOk
+
+def gridLabelAndWidgets(row, labelWidth, label, *widgets):
+    col = 0
+    label['text'] = textwrap.fill(label['text'], labelWidth)
+    label.grid(row=row, column=col, sticky=tk.EW)
+    col += 1
+
+    for w in widgets:
+        w.grid(row=row, column=col, sticky=tk.EW)
+        col += 1
+    return row + 1
+
+def createOptionsCsvColumnSelection(colHeadings, hasHeadindRow=True,
+        pseudoCols=[]):
+    items = []
+
+    idxWidth = max(len(colHeadings),len(pseudoCols))
+    idxWidth = int(math.log10(idxWidth)) + 1
+    idxFmt = '{{0: {0}}}: '.format(idxWidth)
+
+    idxShift = len(pseudoCols)
+    for i, n in enumerate(pseudoCols):
+        fmt = idxFmt + '{1}'
+        items.append(fmt.format(i-idxShift, n))
+
+    if hasHeadindRow:
+        for i, n in enumerate(colHeadings):
+            fmt = idxFmt + '{1}'
+            items.append(fmt.format(i, n))
+    else:
+        for i in range(len(colHeadings)):
+            fmt = idxFmt + 'Coluna #{0}'
+            items.append(fmt.format(i))
+
+    return items, idxShift
+
+
+class ImportAttributesDialog(Dialog):
+    def __init__(self, master, control, attrScope, selectedGraph=''):
+
+        self.control = control
+        self.attrScope = attrScope
+
+        self.graphName = tk.StringVar()
+        if selectedGraph:
+            self.graphName.set(selectedGraph)
+        self.arqIn = tk.StringVar()
+        self.hasHeadingRow = tk.BooleanVar()
+        self.hasHeadingRow.set(True)
+        self.colHeadings = []
+        self.idCols = []
+        self.attrCols = []
+        self.attrColsTxt = tk.StringVar()
+
+        self.attrSpecs = []
+
+        super().__init__(master, 'Importação de atributos')
+
+    def body(self, master):
+        master.columnconfigure(1, weight=1)
+        labelwidth = 25
+        row = 0
+
+        lb = ttk.Label(master, text='Grafo:', anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.graphName, state='readonly')
+        btn = ttk.Button(master, text='Escolher...',
+                command=self._doBtnChooseGraph)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry, btn)
+
+        lb = ttk.Label(master, text='Arquivo:', anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.arqIn, state='readonly')
+        btn = ttk.Button(master, text='Escolher...',
+                command=self._doBtnChooseFile)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry, btn)
+
+        lb = ttk.Label(master, text='A primeira linha do arquivo é cabeçalho')
+        cb = ttk.Checkbutton(master, variable=self.hasHeadingRow)
+        lb.grid(row=row, column=1, columnspan=2, sticky=tk.W)
+        cb.grid(row=row, column=0, sticky=tk.E)
+        row += 1
+
+        if self.attrScope == 'edge':
+            row = self._createIdColsGui(master, row, labelwidth,
+                ['Coluna de origem da aresta:',
+                    'Coluna de destino da aresta:',
+                    'Coluna da relação da aresta:'])
+            self.idSelectionTexts=[
+                'Selecione a coluna que representa o nodo de origem da aresta.',
+                'Selecione a coluna que representa o nodo de destino da aresta.',
+                'Selecione a coluna que representa a relação da aresta.'
+            ]
+        elif self.attrScope == 'node':
+            row = self._createIdColsGui(master, row, labelwidth,
+                ['Coluna do nodo:'])
+            self.idSelectionTexts=[
+                'Selecione a coluna que representa o identificador do nodo.'
+            ]
+
+        lb = ttk.Label(master, text='Colunas de atributos:',
+                justify=tk.RIGHT, anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.attrColsTxt,
+                state='readonly')
+        bt = ttk.Button(master, text='Escolher...', state='disabled',
+                command=self._doBtnChooseAttrCols)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry, bt)
+
+        self.attrColsButton = bt
+
+        bt = ttk.Button(master, text='Configurar atributos...',
+                command=self._doBtnConfigAttrs, state='disabled')
+        bt.grid(row=row, column=0, columnspan=3, sticky=tk.EW)
+        row += 1
+
+        self.configAttrsButton = bt
+
+        master.pack(fill='both', expand=True)
+
+    def _createIdColsGui(self, master, row, labelwidth, texts):
+        # Vetor de variaveis para armazenar os textos de cada componente do
+        # identificador
+        self.idColsTxtVet = []
+        self.idColsButtonVet = []
+
+        def createBtnFun(idx):
+            return lambda : self._doBtnChooseId(idx)
+
+        for i, text in enumerate(texts):
+            var = tk.StringVar()
+            lb = ttk.Label(master, text=text, justify=tk.RIGHT,
+                    anchor=tk.E)
+            entry = ttk.Entry(master, textvariable=var,
+                    state='readonly')
+            bt = ttk.Button(master, text='Escolher...', state=tk.DISABLED,
+                    command=createBtnFun(i))
+            row = gridLabelAndWidgets(row, labelwidth, lb, entry, bt)
+
+            self.idColsTxtVet.append(var)
+            self.idColsButtonVet.append(bt)
+
+            self.idCols.append(-1)
+
+        return row
+
+    def _doBtnChooseGraph(self):
+        graphs = self.control.getGraphNames()
+        dialog = gui.ListSelectionDialog(self, title='Escolha de grafo',
+            text='Escolha o grafo que receberá os atributos importados',
+            items=graphs, selected=self.graphName.get())
+
+        if dialog.result:
+            for i, sel in dialog.result:
+                self.graphName.set(sel)
+
+    def _doBtnChooseFile(self):
+        filename = tk.filedialog.askopenfilename(
+            filetypes=[('csv','*.csv'),('txt','*.txt'),('all','*')])
+        if filename:
+            self.arqIn.set(filename)
+            self.colHeadings = self.control.inspectCsv(filename)
+            self._updateButtonStates()
+
+    def _doBtnChooseAttrCols(self):
+        items, idShift = createOptionsCsvColumnSelection(self.colHeadings,
+                self.hasHeadingRow.get())
+
+        selected = [n for i,n in enumerate(items) if i in self.attrCols]
+
+        dialog = gui.ListSelecManyDialog(self,
+            title='Seleção de colunas de atributos',
+            text='Selecione as colunas que correspondem aos atributos '
+                + 'que devem ser importados.',
+            items=items, selected=selected)
+
+        if dialog.result is not None:
+            self.attrCols = [i for i, t in dialog.result]
+            self.attrColsTxt.set(str(self.attrCols))
+            self._updateButtonStates()
+            self.attrSpecs = []
+
+    def _updateButtonStates(self):
+        btnState = tk.DISABLED
+        if self.arqIn.get():
+            btnState = tk.NORMAL
+
+        self.attrColsButton['state'] = btnState
+        for btn in self.idColsButtonVet:
+            btn['state'] = btnState
+
+        btnState = tk.DISABLED
+        if len(self.attrCols) > 0 and self.graphName.get():
+            btnState = tk.NORMAL
+
+        self.configAttrsButton['state'] = btnState
+
+    def _doBtnChooseId(self, idIdx):
+        items, idxShift = createOptionsCsvColumnSelection(self.colHeadings,
+                self.hasHeadingRow.get())
+
+        selected=self.idColsTxtVet[idIdx].get()
+
+        dialog = gui.ListSelectionDialog(self,
+            title='Seleção de identificador',
+            text=self.idSelectionTexts[idIdx],
+            items=items, selected=selected)
+
+        if dialog.result is not None:
+            for i, v in dialog.result:
+                self.idColsTxtVet[idIdx].set(v)
+                self.idCols[idIdx] = i - idxShift
+                break
+
+    def _doBtnConfigAttrs(self):
+        labels = ['Coluna {0}:'.format(c) for c in self.attrCols]
+
+        if self.hasHeadingRow.get():
+            names = [self.colHeadings[c] for c in self.attrCols]
+        else:
+            names = ['attr_{0}'.format[c] for c in self.attrCols]
+
+        dialog = AttributeConfigDialog(self,
+            numAttrs=len(self.attrCols), attrScope=self.attrScope,
+            control=self.control, graphName=self.graphName.get(),
+            labels=labels, names=names, specs=self.attrSpecs)
+
+        if dialog.result:
+            self.attrSpecs = dialog.attrSpecs
+
+    def apply(self):
+        pass
 
 class TestDialog(Dialog):
     def __init__(self, master):
@@ -787,7 +1117,7 @@ class NewGraphDialog(Dialog):
         nameLabel = ttk.Label(master, text='Nome para o grafo:')
         nameLabel.grid(row=0, column=0, sticky=tk.EW)
         nameEntry = ttk.Entry(master, textvariable=self.name)
-        nameEntry.grid(row=0, column=1, columnspan=2, sticky=tk.EW)
+        nameEntry.grid(row=0, column=1, sticky=tk.EW)
 
         master.pack(expand=True, fill='both')
 
@@ -803,8 +1133,7 @@ class NewGraphDialog(Dialog):
             trace = traceback.format_exc()
             self.control.logger.debug(trace)
             tk.messagebox.showerror('Erro',
-                textwrap.fill('Falha na criação: '+
-                    errmsg, 50))
+                'Falha na criação: '+ errmsg)
 
 
 class OpenGraphmlDialog(Dialog):
@@ -828,15 +1157,16 @@ class OpenGraphmlDialog(Dialog):
 
         fileLabel = ttk.Label(master, text='Arquivo:')
         fileLabel.grid(row=1, column=0, sticky=tk.EW)
-        fileEntry = ttk.Entry(master, textvariable=self.arqIn)
+        fileEntry = ttk.Entry(master, textvariable=self.arqIn, state='readonly')
         fileEntry.grid(row=1, column=1, sticky=tk.EW)
         fileButton = ttk.Button(master, text='Abrir...',
-            command=self._doBtnFileOpen)
+                command=self._doBtnFileOpen)
         fileButton.grid(row=1, column=2, sticky=tk.EW)
 
         relationLabel = ttk.Label(master, text='Atributo de relação:')
         relationLabel.grid(row=2, column=0, sticky=tk.EW)
-        relationEntry = ttk.Entry(master, textvariable=self.relationAttr)
+        relationEntry = ttk.Entry(master, textvariable=self.relationAttr,
+                state='readonly')
         relationEntry.grid(row=2, column=1, sticky=tk.EW)
         self.relationButton = ttk.Button(master, text='Escolher...',
             command=self._doBtnChooseRelation, state=tk.DISABLED)
@@ -849,7 +1179,7 @@ class OpenGraphmlDialog(Dialog):
     def _doBtnFileOpen(self):
         filename = tk.filedialog.askopenfilename(
             filetypes=[('graphml','*.graphml')])
-        if filename != '':
+        if filename:
             self.arqIn.set(filename)
             _,_,edgeAttrs = self.control.inspectGraphmlAttributes(filename)
             self.edgeAttrs = sorted(edgeAttrs.keys())
@@ -857,9 +1187,9 @@ class OpenGraphmlDialog(Dialog):
 
     def _doBtnChooseRelation(self):
         dialog = gui.ListSelectionDialog(self, title='Atributo de relação',
-            text=textwrap.fill('Selecione o atributo que indica a relação ' +
-                'a que cada aresta pertence (tipo da aresta).',40),
-                items=self.edgeAttrs)
+            text='Selecione o atributo que indica a relação ' +
+                'a que cada aresta pertence (tipo da aresta).',
+            items=self.edgeAttrs)
 
         if dialog.result is not None:
             for _, attr in dialog.result:
@@ -884,8 +1214,7 @@ class OpenGraphmlDialog(Dialog):
             trace = traceback.format_exc()
             self.control.logger.debug(trace)
             tk.messagebox.showerror('Erro',
-                textwrap.fill('Falha no carregamento: '+
-                    errmsg, 50))
+                'Falha no carregamento: '+ errmsg)
 
 class OpenCsvEdgesDialog(Dialog):
     def __init__(self, master, control):
@@ -977,7 +1306,7 @@ class OpenCsvEdgesDialog(Dialog):
     def _doBtnFileOpen(self):
         filename = tk.filedialog.askopenfilename(
             filetypes=[('csv','*.csv'),('txt','*.txt'),('all','*')])
-        if filename != '':
+        if filename:
             self.arqIn.set(filename)
             self.colHeadings = self.control.inspectCsv(filename)
             self.srcButton['state'] = tk.NORMAL
@@ -987,18 +1316,16 @@ class OpenCsvEdgesDialog(Dialog):
 
     def _chooseColumn(self, var, title, text, required=True):
 
-        if self.hasHeadingRow.get():
-            items = ['{0}: {1}'.format(i,n) for i,n in enumerate(self.colHeadings)]
+        if required:
+            pseudoCols = []
         else:
-            items = ['{0}'.format(i) for i in range(len(self.colHeadings))]
+            pseudoCols = ['<nenhum>']
 
-        idxShift = 0
-        if not required:
-            items = ['-1: <nenhuma>'] + items
-            idxShift += 1
+        items, idxShift = createOptionsCsvColumnSelection(self.colHeadings,
+                self.hasHeadingRow.get(), pseudoCols)
 
         dialog = gui.ListSelectionDialog(self, title=title,
-            text=textwrap.fill(text,40), items=items)
+            text=text, items=items)
 
         if dialog.result is not None:
             for i, _ in dialog.result:
