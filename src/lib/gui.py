@@ -5,6 +5,7 @@ import tkinter.messagebox as messagebox
 import re
 from queue import Queue, Empty
 import threading
+import textwrap
 
 class ListSelecOneFrame(ttk.Frame):
     def __init__(self, master, filterText='', **options):
@@ -29,7 +30,11 @@ class ListSelecOneFrame(ttk.Frame):
 
         button = ttk.Button(filterFrame, text='Aplicar',
             command=self._applyFilter)
-        button.pack(side='right', padx=1)
+        button.pack(side='left', padx=1)
+
+        button = ttk.Button(filterFrame, text='Remover',
+            command=self._removeFilter)
+        button.pack(side='left', padx=1)
 
         return filterFrame
 
@@ -54,6 +59,10 @@ class ListSelecOneFrame(ttk.Frame):
         selScrollH['command'] = self.listBox.xview
 
         return listFrame
+
+    def _removeFilter(self):
+        self._filterText.set('')
+        self._applyFilter()
 
     def _applyFilter(self):
         text = self._filterText.get()
@@ -114,8 +123,7 @@ class ListSelecOneFrame(ttk.Frame):
             pass
 
 class ListSelecManyFrame(ttk.Frame):
-    def __init__(self, master, filterText='',
-            selectmode=tk.BROWSE, **options):
+    def __init__(self, master, filterText='', **options):
         super().__init__(master, **options)
 
         self._filter = ''
@@ -139,7 +147,11 @@ class ListSelecManyFrame(ttk.Frame):
 
         button = ttk.Button(filterFrame, text='Aplicar',
             command=self._applyFilter)
-        button.pack(side='right', padx=1)
+        button.pack(side='left', padx=1)
+
+        button = ttk.Button(filterFrame, text='Remover',
+            command=self._removeFilter)
+        button.pack(side='left', padx=1)
 
         return filterFrame
 
@@ -219,6 +231,10 @@ class ListSelecManyFrame(ttk.Frame):
 
         return listFrame, listBox
 
+    def _removeFilter(self):
+        self._filterText.set('')
+        self._applyFilter()
+
     def _applyFilter(self):
         text = self._filterText.get()
         self._filter = text
@@ -286,7 +302,10 @@ class ListSelectionDialog(Dialog):
     """Dialog that permits the user to select items from a list.
     """
     def __init__(self, parent, title=None,
-            text='', items=[], selected=None, filterText=''):
+            text='', items=[], selected=None, filterText='', textFill=60):
+
+        if textFill is not None:
+            text = textwrap.fill(text, textFill)
 
         self._text = text
         self._items = items
@@ -321,7 +340,10 @@ class ListSelecManyDialog(Dialog):
     """Dialog that permits the user to select many items from a list.
     """
     def __init__(self, parent, title=None,
-            text='', items=[], selected=[], filterText=''):
+            text='', items=[], selected=[], filterText='', textFill=60):
+
+        if textFill is not None:
+            text = textwrap.fill(text, textFill)
 
         self._text = text
         self._items = items
