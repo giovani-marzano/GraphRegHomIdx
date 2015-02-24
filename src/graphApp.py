@@ -683,11 +683,11 @@ class GraphAppGUI(tk.Frame):
         self.menuBar.add_cascade(label='Grafo', menu=m)
         m.add_command(label='Novo...', command=self.menuCmdNewGraph)
         m.add_command(label='Remover...', command=self.menuCmdRemoveGraph)
-        m.add_separator()
-        m.add_command(label='#Adicionar atributo...',
-            command=self.menuCmdNotImplemented)
-        m.add_command(label='#Remover atributo...',
-            command=self.menuCmdNotImplemented)
+        #m.add_separator()
+        #m.add_command(label='#Adicionar atributo...',
+        #    command=self.menuCmdNotImplemented)
+        #m.add_command(label='#Remover atributo...',
+        #    command=self.menuCmdNotImplemented)
         m.add_separator()
         m.add_command(label='#Morfismo cheio...',
             command=self.menuCmdNotImplemented)
@@ -698,11 +698,11 @@ class GraphAppGUI(tk.Frame):
             command=self.menuCmdImportNodeAttr)
         m.add_command(label='Exportar atributos para csv...',
             command=self.menuCmdExportNodeAttr)
-        m.add_command(label='#Remover atributos...',
-            command=self.menuCmdNotImplemented)
-        m.add_separator()
-        m.add_command(label='#Remover nodos...',
-            command=self.menuCmdNotImplemented)
+        #m.add_command(label='#Remover atributos...',
+        #    command=self.menuCmdNotImplemented)
+        #m.add_separator()
+        #m.add_command(label='#Remover nodos...',
+        #    command=self.menuCmdNotImplemented)
         m.add_separator()
         m.add_command(label='#Classificar por equivalência regular...',
             command=self.menuCmdNotImplemented)
@@ -713,15 +713,13 @@ class GraphAppGUI(tk.Frame):
             command=self.menuCmdImportEdgeAttr)
         m.add_command(label='Exportar atributos para csv...',
             command=self.menuCmdExportEdgeAttr)
-        m.add_command(label='#Remover atributos...',
-            command=self.menuCmdNotImplemented)
-        m.add_separator()
-        m.add_command(label='#Remover arestas...',
-            command=self.menuCmdNotImplemented)
+        #m.add_command(label='#Remover atributos...',
+        #    command=self.menuCmdNotImplemented)
+        #m.add_separator()
+        #m.add_command(label='#Remover arestas...',
+        #    command=self.menuCmdNotImplemented)
 
     def menuCmdNotImplemented(self):
-        d = AttributeConfigDialog(self, numAttrs=7, attrScope='edge',
-            control=self.control, graphName=list(self.graphToIid.keys())[0])
         tk.messagebox.showinfo('Não implementado',
             'Funcionalidade ainda não implementada')
 
