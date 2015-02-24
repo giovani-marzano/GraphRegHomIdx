@@ -243,6 +243,8 @@ class MultiGraph(object):
             del self.edgeAttrs[attrName]
 
     def getNodeAttrValueSet(self, attrName, default=None):
+        """Recupera o conjunto dos valores distintos de um atributo de nodo
+        """
         attrDict = self.nodeAttrs.get(attrName)
         if attrDict is not None:
             valueSet = set(attrDict.values())
@@ -255,6 +257,8 @@ class MultiGraph(object):
         return valueSet
 
     def getEdgeAttrValueSet(self, attrName, default=None):
+        """Recupera o conjunto dos valores distintos de um atributo de aresta.
+        """
         attrDict = self.edgeAttrs.get(attrName)
         if attrDict is not None:
             valueSet = set(attrDict.values())

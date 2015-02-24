@@ -152,6 +152,9 @@ class GraphAppControl(object):
     def getGraphNames(self):
         return sorted(self.graphModels.keys())
 
+    def getGraphModel(self, graphName):
+        return self.graphModels.get(graphName)
+
     def insertGraph(self, g, name=None, filename=None):
         if name is None or name == '':
             name = self.generateNumericName()
@@ -433,6 +436,45 @@ class GraphAppControl(object):
 
         return (True,'')
 
+    def exportIdsAndAttrsToCsv(self, graphName, filename, attrScope, attrNames):
+        if attrScope not in ['node', 'edge']:
+            raise ValueError(
+                "Escopo de atributo '{0}' desconhecido.".format(attrScope))
+
+        if graphName not in self.graphModels.keys():
+            raise ValueError(
+                "Grafo '{0}' não existe".format(graphName))
+
+        gmod = self.graphModels[graphName]
+
+        with open(filename, 'w', newline='') as f:
+            writer = csv.writer(f, self.csvDialect)
+
+            if attrScope == 'node':
+                headings = ['node']
+                items = gmod.graph.nodes()
+            elif attrScope == 'edge':
+                headings = ['source','target','relation']
+                items = gmod.graph.edges()
+
+            headings = headings + attrNames
+
+            writer.writerow(headings)
+
+            if attrScope == 'node':
+                for item in items:
+                    row = [item]
+                    for attr in attrNames:
+                        row.append(gmod.graph.getNodeAttr(item, attr))
+                    writer.writerow(row)
+            elif attrScope == 'edge':
+                for item in items:
+                    row = list(item)
+                    for attr in attrNames:
+                        row.append(gmod.graph.getEdgeAttr(item, attr))
+                    writer.writerow(row)
+        # end with
+
 #---------------------------------------------------------------------
 # Classes GUI
 #---------------------------------------------------------------------
@@ -654,8 +696,8 @@ class GraphAppGUI(tk.Frame):
         self.menuBar.add_cascade(label='Nodos', menu=m)
         m.add_command(label='Importar atributos de csv...',
             command=self.menuCmdImportNodeAttr)
-        m.add_command(label='#Exportar atributos para csv...',
-            command=self.menuCmdNotImplemented)
+        m.add_command(label='Exportar atributos para csv...',
+            command=self.menuCmdExportNodeAttr)
         m.add_command(label='#Remover atributos...',
             command=self.menuCmdNotImplemented)
         m.add_separator()
@@ -669,8 +711,8 @@ class GraphAppGUI(tk.Frame):
         self.menuBar.add_cascade(label='Arestas', menu=m)
         m.add_command(label='Importar atributos de csv...',
             command=self.menuCmdImportEdgeAttr)
-        m.add_command(label='#Exportar atributos para csv...',
-            command=self.menuCmdNotImplemented)
+        m.add_command(label='Exportar atributos para csv...',
+            command=self.menuCmdExportEdgeAttr)
         m.add_command(label='#Remover atributos...',
             command=self.menuCmdNotImplemented)
         m.add_separator()
@@ -695,6 +737,18 @@ class GraphAppGUI(tk.Frame):
     def menuCmdImportNodeAttr(self):
         self._cmdImportAttr('node')
 
+    def _cmdExportAttr(self, attrScope):
+        gsel = self.getSelectedGraph()
+        if gsel is not None:
+            gsel = gsel.name
+        d = ExportAttributesDialog(self, self.control, attrScope, gsel)
+
+    def menuCmdExportEdgeAttr(self):
+        self._cmdExportAttr('edge')
+
+    def menuCmdExportNodeAttr(self):
+        self._cmdExportAttr('node')
+
     def menuCmdQuit(self):
         self.quit()
 
@@ -708,7 +762,7 @@ class GraphAppGUI(tk.Frame):
         dialog = OpenCsvEdgesDialog(self, self.control)
 
     def menuCmdRemoveGraph(self):
-        items = sorted(self.control.graphModels.keys())
+        items = self.control.getGraphNames()
         selected = self.getSelectedGraph()
         if selected is not None:
             selected = selected.name
@@ -720,7 +774,7 @@ class GraphAppGUI(tk.Frame):
                 self.control.removeGraph(selection)
 
     def menuCmdSaveGraphml(self):
-        items = sorted(self.control.graphModels.keys())
+        items = self.control.getGraphNames()
         selected = self.getSelectedGraph()
         if selected is not None:
             selected = selected.name
@@ -1151,6 +1205,121 @@ class ImportAttributesDialog(Dialog):
                     firstRowIsHeading=self.hasHeadingRow.get())
         except Exception as ex:
             showExceptionMsg(ex, 'Falha na importação de atributos',
+                self.control.logger)
+
+class ExportAttributesDialog(Dialog):
+    def __init__(self, master, control, attrScope, selectedGraph=''):
+
+        self.control = control
+        self.attrScope = attrScope
+
+        self.graphName = tk.StringVar()
+
+        self.attrs = []
+        self.selectedAttrs = []
+        self.attrsTxt = tk.StringVar()
+
+        if selectedGraph:
+            self._setGraphName(selectedGraph)
+
+        super().__init__(master, 'Exportação de atributos')
+
+    def _setGraphName(self, graphName):
+        self.graphName.set(graphName)
+
+        gmod = self.control.getGraphModel(graphName)
+        if gmod:
+            if self.attrScope == 'node':
+                self.attrs = sorted(gmod.graph.getNodeAttrNames())
+            elif self.attrScope == 'edge':
+                self.attrs = sorted(gmod.graph.getEdgeAttrNames())
+        else:
+            self.attrs = []
+
+        self.selectedAttrs = []
+        self.attrsTxt.set(str(self.selectedAttrs))
+
+    def body(self, master):
+        master.columnconfigure(1, weight=1)
+        labelwidth = 25
+        row = 0
+
+        lb = ttk.Label(master, text='Grafo:', anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.graphName, state='readonly')
+        btn = ttk.Button(master, text='Escolher...',
+                command=self._doBtnChooseGraph)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry, btn)
+
+        lb = ttk.Label(master, text='Atributos:', anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.attrsTxt,
+                state='readonly')
+        bt = ttk.Button(master, text='Escolher...', state='disabled',
+                command=self._doBtnChooseAttrCols)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry, bt)
+
+        self.attrColsButton = bt
+
+        self._updateButtonStates()
+
+        master.pack(fill='both', expand=True)
+
+    def _doBtnChooseGraph(self):
+        graphs = self.control.getGraphNames()
+        dialog = gui.ListSelectionDialog(self, title='Escolha de grafo',
+            text='Escolha o grafo que cujos atributos serão exportados',
+            items=graphs, selected=self.graphName.get())
+
+        if dialog.result:
+            for i, sel in dialog.result:
+                self._setGraphName(sel)
+                self._updateButtonStates()
+                break
+
+    def _doBtnChooseAttrCols(self):
+        dialog = gui.ListSelecManyDialog(self,
+            title='Seleção de atributos',
+            text='Selecione os atributos que devem ser exportados.',
+            items=self.attrs, selected=self.selectedAttrs)
+
+        if dialog.result is not None:
+            self.selectedAttrs = [t for _, t in dialog.result]
+            self.attrsTxt.set(str(self.selectedAttrs))
+            self._updateButtonStates()
+
+    def _updateButtonStates(self):
+        btnState = tk.DISABLED
+        if self.attrs:
+            btnState = tk.NORMAL
+
+        self.attrColsButton['state'] = btnState
+
+    def validate(self):
+        isOk = True
+        errMsg = ''
+
+        if not self.graphName.get():
+            errMsg = 'O grafo não foi escolhido!'
+            isOk = False
+
+        if not isOk:
+            tk.messagebox.showwarning('Problema na configuração',
+                errMsg)
+
+        return isOk
+
+    def apply(self):
+        filename = tk.filedialog.asksaveasfilename(
+            filetypes=[('csv','*.csv'),('txt','*.txt'),('all','*')],
+            defaultextension='.csv')
+        if not filename:
+            return
+
+        try:
+            self.control.exportIdsAndAttrsToCsv(graphName=self.graphName.get(),
+                filename=filename,
+                attrScope=self.attrScope, attrNames=self.selectedAttrs)
+        except Exception as ex:
+            showExceptionMsg(ex, 'Falha na exportação de atributos',
                 self.control.logger)
 
 class TestDialog(Dialog):
