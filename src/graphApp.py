@@ -980,8 +980,8 @@ class ImportAttributesDialog(Dialog):
         self.attrSpecs = []
 
         if attrScope == 'edge':
-            self.idLabelTexts = ['Coluna de origem da aresta',
-                'Coluna de destino da aresta',
+            self.idLabelTexts = ['Coluna da origem da aresta',
+                'Coluna do destino da aresta',
                 'Coluna da relação da aresta']
             self.idSelectionTexts=[
                 'Selecione a coluna que representa o nodo de origem da aresta.',
@@ -1447,6 +1447,11 @@ class OpenGraphmlDialog(Dialog):
                 'Falha no carregamento: '+ errmsg)
 
 class OpenCsvEdgesDialog(Dialog):
+    IDX_SRC = 0
+    IDX_TGT = 1
+    IDX_REL = 2
+    IDX_WEIGHT = 3
+
     def __init__(self, master, control):
 
         self.control = control
@@ -1455,83 +1460,98 @@ class OpenCsvEdgesDialog(Dialog):
         self.name.set(control.generateNumericName())
         self.hasHeadingRow = tk.BooleanVar()
         self.hasHeadingRow.set(True)
-        self.srcCol = tk.IntVar()
-        self.srcCol.set(0)
-        self.tgtCol = tk.IntVar()
-        self.tgtCol.set(1)
-        self.relCol = tk.IntVar()
-        self.relCol.set(-1)
-        self.weightCol = tk.IntVar()
-        self.weightCol.set(-1)
+
+        self.idCols = []
 
         self.colHeadings = []
+
+        self.idLabelTexts = ['Coluna da origem da aresta',
+            'Coluna do destino da aresta',
+            'Coluna da relação da aresta',
+            'Coluna do peso da aresta',
+            ]
+
+        self.idSelectionTexts=[
+            'Selecione a coluna que representa o nodo de origem da aresta.',
+            'Selecione a coluna que representa o nodo de destino da aresta.',
+            'Selecione a coluna que representa a relação da aresta.',
+            'Selecione a coluna que representa o peso da aresta.'
+        ]
+        self.idRequired=[True, True, False, False]
 
         super().__init__(master, 'Carregamento de CSV de arestas')
 
     def body(self, master):
         master.columnconfigure(1, weight=1)
+        labelwidth = 25
         row = 0
 
-        nameLabel = ttk.Label(master, text='Nome para o grafo:')
-        nameLabel.grid(row=row, column=0, sticky=tk.E)
+        nameLabel = ttk.Label(master, text='Nome para o grafo:',
+                justify=tk.RIGHT, anchor=tk.E)
         nameEntry = ttk.Entry(master, textvariable=self.name)
-        nameEntry.grid(row=row, column=1, columnspan=2, sticky=tk.EW)
-        row += 1
+        row = gridLabelAndWidgets(row, labelwidth, nameLabel, nameEntry)
 
-        headingsLabel = ttk.Label(master, text='A primeia linha é cabeçalho:')
-        headingsLabel.grid(row=row, column=0, sticky=tk.E)
         headingsCheck = ttk.Checkbutton(master, variable=self.hasHeadingRow)
-        headingsCheck.grid(row=row, column=1, sticky=tk.W)
+        headingsCheck.grid(row=row, column=0, sticky=tk.E)
+        headingsLabel = ttk.Label(master, text='A primeia linha é cabeçalho',
+                justify=tk.LEFT, anchor=tk.W)
+        headingsLabel.grid(row=row, column=1, columnspan=2, sticky=tk.EW)
         row += 1
 
-        fileLabel = ttk.Label(master, text='Arquivo:')
-        fileLabel.grid(row=row, column=0, sticky=tk.E)
+        fileLabel = ttk.Label(master, text='Arquivo:', justify=tk.RIGHT,
+                anchor=tk.E)
         fileEntry = ttk.Entry(master, textvariable=self.arqIn)
-        fileEntry.grid(row=row, column=1, sticky=tk.EW)
         fileButton = ttk.Button(master, text='Abrir...',
             command=self._doBtnFileOpen)
-        fileButton.grid(row=row, column=2, sticky=tk.EW)
-        row += 1
+        row = gridLabelAndWidgets(row, labelwidth, fileLabel, fileEntry,
+                fileButton)
 
-        srcLabel = ttk.Label(master, text='Coluna do nodo de origem:')
-        srcLabel.grid(row=row, column=0, sticky=tk.E)
-        srcValLabel = ttk.Label(master, textvariable=self.srcCol)
-        srcValLabel.grid(row=row, column=1, sticky=tk.W)
-        self.srcButton = ttk.Button(master, text='Escolher...',
-            command=self._doBtnChooseSrc, state=tk.DISABLED)
-        self.srcButton.grid(row=row, column=2, sticky=tk.EW)
-        row += 1
-
-        tgtLabel = ttk.Label(master, text='Coluna do nodo de destino:')
-        tgtLabel.grid(row=row, column=0, sticky=tk.E)
-        tgtValLabel = ttk.Label(master, textvariable=self.tgtCol)
-        tgtValLabel.grid(row=row, column=1, sticky=tk.W)
-        self.tgtButton = ttk.Button(master, text='Escolher...',
-            command=self._doBtnChooseTgt, state=tk.DISABLED)
-        self.tgtButton.grid(row=row, column=2, sticky=tk.EW)
-        row += 1
-
-        relLabel = ttk.Label(master, text='Coluna da relação:')
-        relLabel.grid(row=row, column=0, sticky=tk.E)
-        relValLabel = ttk.Label(master, textvariable=self.relCol)
-        relValLabel.grid(row=row, column=1, sticky=tk.W)
-        self.relButton = ttk.Button(master, text='Escolher...',
-            command=self._doBtnChooseRelation, state=tk.DISABLED)
-        self.relButton.grid(row=row, column=2, sticky=tk.EW)
-        row += 1
-
-        weightLabel = ttk.Label(master, text='Coluna do peso:')
-        weightLabel.grid(row=row, column=0, sticky=tk.E)
-        weightValLabel = ttk.Label(master, textvariable=self.weightCol)
-        weightValLabel.grid(row=row, column=1, sticky=tk.W)
-        self.weightButton = ttk.Button(master, text='Escolher...',
-            command=self._doBtnChooseWeight, state=tk.DISABLED)
-        self.weightButton.grid(row=row, column=2, sticky=tk.EW)
-        row += 1
+        row = self._createIdColsGui(master, row, labelwidth, self.idLabelTexts)
 
         master.pack(expand=True, fill='both')
 
         return nameEntry
+
+    def _createIdColsGui(self, master, row, labelwidth, texts):
+        # Vetor de variaveis para armazenar os textos de cada componente do
+        # identificador
+        self.idColsTxtVet = []
+        self.idColsButtonVet = []
+
+        def createBtnFun(idx):
+            return lambda : self._doBtnChooseId(idx)
+
+        for i, text in enumerate(texts):
+            var = tk.StringVar()
+            lb = ttk.Label(master, text=text+':', justify=tk.RIGHT,
+                    anchor=tk.E)
+            entry = ttk.Entry(master, textvariable=var,
+                    state='readonly')
+            bt = ttk.Button(master, text='Escolher...', state=tk.DISABLED,
+                    command=createBtnFun(i))
+            row = gridLabelAndWidgets(row, labelwidth, lb, entry, bt)
+
+            self.idColsTxtVet.append(var)
+            self.idColsButtonVet.append(bt)
+
+            self.idCols.append(-1)
+
+        return row
+
+    def _updateButtonStates(self):
+        btnState = tk.DISABLED
+        if self.arqIn.get():
+            btnState = tk.NORMAL
+
+        for btn in self.idColsButtonVet:
+            btn['state'] = btnState
+
+    def _resetConfiguration(self):
+        for i in range(len(self.idCols)):
+            self.idCols[i] = -1
+
+        for var in self.idColsTxtVet:
+            var.set('')
 
     def _doBtnFileOpen(self):
         filename = tk.filedialog.askopenfilename(
@@ -1539,12 +1559,14 @@ class OpenCsvEdgesDialog(Dialog):
         if filename:
             self.arqIn.set(filename)
             self.colHeadings = self.control.inspectCsv(filename)
-            self.srcButton['state'] = tk.NORMAL
-            self.tgtButton['state'] = tk.NORMAL
-            self.relButton['state'] = tk.NORMAL
-            self.weightButton['state'] = tk.NORMAL
+            self._resetConfiguration()
+            self._updateButtonStates()
 
-    def _chooseColumn(self, var, title, text, required=True):
+    def _doBtnChooseId(self, idx):
+
+        required = self.idRequired[idx]
+        title = self.idLabelTexts[idx]
+        text = self.idSelectionTexts[idx]
 
         if required:
             pseudoCols = []
@@ -1558,34 +1580,34 @@ class OpenCsvEdgesDialog(Dialog):
             text=text, items=items)
 
         if dialog.result is not None:
-            for i, _ in dialog.result:
-                var.set(i - idxShift)
+            for i, v in dialog.result:
+                self.idCols[idx] = i - idxShift
+                self.idColsTxtVet[idx].set(v)
                 break
 
-    def _doBtnChooseSrc(self):
-        self._chooseColumn(self.srcCol,
-            'Coluna do nodo de origem',
-            'Selecione a coluna que indica o nodo de origem da aresta.',
-            True)
+    def validate(self):
+        isOk = True
+        errMsg = ''
 
-    def _doBtnChooseTgt(self):
-        self._chooseColumn(self.tgtCol,
-            'Coluna do nodo de destino',
-            'Selecione a coluna que indica o nodo de destino da aresta.',
-            True)
+        if isOk and not self.name.get().strip():
+            isOk = False
+            errMsg = 'Não foi escolhido um nome para o grafo!'
 
-    def _doBtnChooseWeight(self):
-        self._chooseColumn(self.weightCol,
-            'Coluna de peso da aresta',
-            'Selecione a coluna que indica o peso da aresta.',
-            False)
+        if isOk and not self.arqIn.get().strip():
+            isOk = False
+            errMsg = 'Arquivo de entrada não configurado!'
 
-    def _doBtnChooseRelation(self):
-        self._chooseColumn(self.relCol,
-            'Coluna de relação da aresta',
-            'Selecione a coluna que indica a qual relação ' +
-            'a aresta pertence (tipo da aresta).',
-            False)
+        for i, c in enumerate(self.idCols):
+            if isOk and self.idRequired[i] and c < 0:
+                errMsg = "O item '{0}' nao foi configurado!".format(
+                            self.idLabelTexts[i])
+                isOk = False
+
+        if not isOk:
+            tk.messagebox.showwarning('Problema na configuração',
+                errMsg)
+
+        return isOk
 
     def apply(self):
         filename = self.arqIn.get().strip()
@@ -1593,19 +1615,21 @@ class OpenCsvEdgesDialog(Dialog):
         if len(name) == 0:
             name = None
 
-        relCol = self.relCol.get()
+        srcCol = self.idCols[OpenCsvEdgesDialog.IDX_SRC]
+        tgtCol = self.idCols[OpenCsvEdgesDialog.IDX_TGT]
+        relCol = self.idCols[OpenCsvEdgesDialog.IDX_REL]
         if relCol < 0:
             relCol = None
 
-        weightCol = self.weightCol.get()
+        weightCol = self.idCols[OpenCsvEdgesDialog.IDX_WEIGHT]
         if weightCol < 0:
             weightCol = None
 
         try:
-            self.control.loadCsvGraphEdges(filename,
-                self.srcCol.get(), self.tgtCol.get(), name,
-                relCol, weightCol,
-                self.hasHeadingRow.get())
+            self.control.loadCsvGraphEdges(filename=filename,
+                srcNodeCol=srcCol, tgtNodeCol=tgtCol, name=name,
+                relationCol=relCol, weightCol=weightCol,
+                firstRowIsHeading=self.hasHeadingRow.get())
         except Exception as ex:
             showExceptionMsg(ex, 'Falha no carregamento',
                 self.control.logger)
