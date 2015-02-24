@@ -28,7 +28,7 @@ Referências
 - Artigo: "Chinese Whispers - an Efficient Graph Clustering Algorithm
   and its Application to Natural Language Processing Problems"
   Para clusterizar os vértices do grafo para gerar clusters melhores. Arquivo:
-  BiemannTextGraph06.pdf
+  Biemann-ChineseWhispers.pdf
 
 - Artigo: "Graph and semigroup homomorphisms on networks of relations" de
   Douglas R. WHITE and Karl P. REITZ. Fala sobre os tipos de homomorfismos.
@@ -43,3 +43,5 @@ Referências
 
 - Livro "Teoria das categorias para ciência da computação" de Paulo Blauth
   Menezes e Edward Hermann Haeusler.
+
+- Artigo "Graph clustering" de Satu Elisa Schaeffer. Editora: Elsevier, 2007. 
