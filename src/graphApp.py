@@ -475,6 +475,34 @@ class GraphAppControl(object):
                     writer.writerow(row)
         # end with
 
+    def classifyByRegularEquivalence(self, graphName, classAttr,
+            preClassAttr=None, edgeClassAttr=None):
+
+        if graphName not in self.graphModels.keys():
+            raise ValueError(
+                "Grafo '{0}' não existe".format(graphName))
+
+        spec = AttrSpec(classAttr, 'int')
+
+        isOk, errMsg = self.validateNewAttrs(gmod, [spec], 'node')
+        if not isOk:
+            raise ValueError("'classAttr' inválido. " + errMsg)
+
+        if preClassAttr is not None:
+            if preClassAttr not in gmod.graph.getNodeAttrNames():
+                raise ValueError("Atributo de nodo '{0}' não existe".format(preClassAttr))
+
+        if edgeClassAttr is not None:
+            if edgeClassAttr not in gmod.graph.getEdgeAttrNames():
+                raise ValueError("Atributo de aresta '{0}' não existe".format(edgeClassAttr))
+
+        gmod = self.graphModels[graphName]
+
+        gmod.graph.classifyNodesRegularEquivalence(classAttr, preClassAttr,
+                edgeClassAttr)
+
+        self._callChangeHandlers(gmod)
+
 #---------------------------------------------------------------------
 # Classes GUI
 #---------------------------------------------------------------------
@@ -704,8 +732,8 @@ class GraphAppGUI(tk.Frame):
         #m.add_command(label='#Remover nodos...',
         #    command=self.menuCmdNotImplemented)
         m.add_separator()
-        m.add_command(label='#Classificar por equivalência regular...',
-            command=self.menuCmdNotImplemented)
+        m.add_command(label='Classificar por equivalência regular...',
+            command=self.menuCmdClassifyRegularEquiv)
 
         m = tk.Menu(self.menuBar)
         self.menuBar.add_cascade(label='Arestas', menu=m)
@@ -798,6 +826,13 @@ class GraphAppGUI(tk.Frame):
                 )
             if filename:
                 self.control.saveGraphml(gmod.name, filename)
+
+    def menuCmdClassifyRegularEquiv(self):
+        gsel = self.getSelectedGraph()
+        if gsel is not None:
+            gsel = gsel.name
+        d = ClassifyRegularEquivDialog(self, self.control, gsel)
+
 
 class AttributeConfigFrame(ttk.Frame):
     def __init__(self, master, numAttrs, **options):
@@ -1318,6 +1353,179 @@ class ExportAttributesDialog(Dialog):
                 attrScope=self.attrScope, attrNames=self.selectedAttrs)
         except Exception as ex:
             showExceptionMsg(ex, 'Falha na exportação de atributos',
+                self.control.logger)
+
+class ClassifyRegularEquivDialog(Dialog):
+    def __init__(self, master, control, selectedGraph=''):
+
+        self.control = control
+
+        self.graphName = tk.StringVar()
+        self.classAttr = tk.StringVar()
+        self.preClassAttrTxt = tk.StringVar()
+        self.preClassAttr = None
+        self.edgeClassAttrTxt = tk.StringVar()
+        self.edgeClassAttr = None
+        self.nodeAttrs = []
+        self.edgeAttrs = []
+
+        if selectedGraph:
+            self._setGraphName(selectedGraph)
+
+        super().__init__(master, 'Classificação regular')
+
+    def _setGraphName(self, graphName):
+        self.graphName.set(graphName)
+
+        gmod = self.control.getGraphModel(graphName)
+        if gmod:
+            self.nodeAttrs = sorted(gmod.graph.getNodeAttrNames())
+            self.edgeAttrs = sorted(gmod.graph.getEdgeAttrNames())
+        else:
+            self.edgeAttrs = []
+            self.nodeAttrs = []
+
+        self.preClassAttr = None
+        self.edgeClassAttr = None
+        self.edgeClassAttrTxt.set('')
+        self.preClassAttrTxt.set('')
+
+    def body(self, master):
+        master.columnconfigure(1, weight=1)
+        labelwidth = 25
+        row = 0
+
+        lb = ttk.Label(master, text='Grafo:', justify=tk.RIGHT, anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.graphName, state='readonly')
+        btn = ttk.Button(master, text='Escolher...',
+                command=self._doBtnChooseGraph)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry, btn)
+
+        lb = ttk.Label(master, text='Atributo para a classe gerada:',
+                justify=tk.RIGHT, anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.classAttr)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry)
+
+        lb = ttk.Label(master, text='Atributo de pré-classificação:',
+                justify=tk.RIGHT, anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.graphName, state='readonly')
+        btn = ttk.Button(master, text='Escolher...',
+                command=self._doBtnChoosePreClass)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry, btn)
+
+        self.preClassButton = btn
+
+        lb = ttk.Label(master, text='Classes de aresta:', justify=tk.RIGHT,
+                anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.graphName, state='readonly')
+        btn = ttk.Button(master, text='Escolher...',
+                command=self._doBtnChooseEdgeClass)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry, btn)
+
+        self.edgeClassButton = btn
+
+        self._updateButtonStates()
+
+        master.pack(fill='both', expand=True)
+
+    def _doBtnChooseGraph(self):
+        graphs = self.control.getGraphNames()
+        dialog = gui.ListSelectionDialog(self, title='Escolha de grafo',
+            text='Escolha o grafo que cujos atributos serão exportados',
+            items=graphs, selected=self.graphName.get())
+
+        if dialog.result:
+            for i, sel in dialog.result:
+                self._setGraphName(sel)
+                self._updateButtonStates()
+                break
+
+    def _doBtnChoosePreClass(self):
+        items = ['<nenhum>'] + self.nodeAttrs
+        idxShift = 1
+
+        dialog = gui.ListSelectionDialog(self,
+            title='Seleção de pré-classificação',
+            text='Selecione, opcionalmente, o atributo de nodo que contém uma ' +
+                 'pré-classificação dos nodos. O algoritmo que busca pela ' +
+                 'classificação regular irá tomar a pré-classificação como ' +
+                 'ponto de partida. Caso não seja configurada uma ' +
+                 'pré-classificação, o algoritmo começará com todos os nodos ' +
+                 'em uma mesma classe.',
+            items=self.attrs, selected=self.preClassAttrTxt.get())
+
+        if dialog.result is not None:
+            for i, v in dialog.result:
+                if i - idxShift < 0:
+                    self.preClassAttr = None
+                else:
+                    self.preClassAttr = v
+
+                self.preClassAttrTxt.set(v)
+
+    def _doBtnChooseEdgeClass(self):
+        items = ['<relação da aresta>'] + self.nodeAttrs
+        idxShift = 1
+
+        dialog = gui.ListSelectionDialog(self,
+            title='Seleção de classe de arestas',
+            text='Selecione a classificação da aresta, ou seja, os tipos de ' +
+                 'das arestas que o algoritmo deve considerar.\n\n' +
+                 'A escolha pode ser buscar o tipo pela relação das arestas ' +
+                 'no grafo, ou considerar o valor de um atributo de aresta ' +
+                 'como o tipo da aresta.',
+            items=self.attrs, selected=self.preClassAttrTxt.get())
+
+        if dialog.result is not None:
+            for i, v in dialog.result:
+                if i - idxShift < 0:
+                    self.edgeClassAttr = None
+                else:
+                    self.edgeClassAttr = v
+
+                self.edgeClassAttrTxt.set(v)
+
+    def _updateButtonStates(self):
+        btnState = tk.DISABLED
+        if self.graphName.get().strip():
+            btnState = tk.NORMAL
+
+        self.preClassButton['state'] = btnState
+        self.edgeClassButton['state'] = btnState
+
+    def validate(self):
+        isOk = True
+        errMsg = ''
+
+        if not self.graphName.get():
+            errMsg = 'O grafo não foi escolhido!'
+            isOk = False
+
+        className = self.classAttr.get().strip()
+
+        if isOk and not className:
+            isOk = False
+            errMsg = 'O nome do atributo de classe a ser criado não foi configurado!'
+
+        if isOk:
+            spec = gr.AttrSpec(className, 'int')
+            isOk, errMsg = self.control.validateNewAttrs(self.graphName.get(),
+            [spec], 'node')
+
+        if not isOk:
+            tk.messagebox.showwarning('Problema na configuração',
+                errMsg)
+
+        return isOk
+
+    def apply(self):
+        try:
+            self.control.classifyByRegularEquivalence(graphName=self.graphName.get(),
+                classAttr=self.classAttr.get().strip(),
+                preClassAttr=self.preClassAttr,
+                edgeClassAttr=self.edgeClassAttr)
+        except Exception as ex:
+            showExceptionMsg(ex, 'Falha na classificação',
                 self.control.logger)
 
 class TestDialog(Dialog):
