@@ -482,7 +482,9 @@ class GraphAppControl(object):
             raise ValueError(
                 "Grafo '{0}' não existe".format(graphName))
 
-        spec = AttrSpec(classAttr, 'int')
+        gmod = self.graphModels[graphName]
+
+        spec = gr.AttrSpec(classAttr, 'int')
 
         isOk, errMsg = self.validateNewAttrs(gmod, [spec], 'node')
         if not isOk:
@@ -495,8 +497,6 @@ class GraphAppControl(object):
         if edgeClassAttr is not None:
             if edgeClassAttr not in gmod.graph.getEdgeAttrNames():
                 raise ValueError("Atributo de aresta '{0}' não existe".format(edgeClassAttr))
-
-        gmod = self.graphModels[graphName]
 
         gmod.graph.classifyNodesRegularEquivalence(classAttr, preClassAttr,
                 edgeClassAttr)
@@ -1408,7 +1408,8 @@ class ClassifyRegularEquivDialog(Dialog):
 
         lb = ttk.Label(master, text='Atributo de pré-classificação:',
                 justify=tk.RIGHT, anchor=tk.E)
-        entry = ttk.Entry(master, textvariable=self.graphName, state='readonly')
+        entry = ttk.Entry(master, textvariable=self.preClassAttrTxt,
+                state='readonly')
         btn = ttk.Button(master, text='Escolher...',
                 command=self._doBtnChoosePreClass)
         row = gridLabelAndWidgets(row, labelwidth, lb, entry, btn)
@@ -1417,7 +1418,8 @@ class ClassifyRegularEquivDialog(Dialog):
 
         lb = ttk.Label(master, text='Classes de aresta:', justify=tk.RIGHT,
                 anchor=tk.E)
-        entry = ttk.Entry(master, textvariable=self.graphName, state='readonly')
+        entry = ttk.Entry(master, textvariable=self.edgeClassAttrTxt,
+                state='readonly')
         btn = ttk.Button(master, text='Escolher...',
                 command=self._doBtnChooseEdgeClass)
         row = gridLabelAndWidgets(row, labelwidth, lb, entry, btn)
@@ -1452,7 +1454,7 @@ class ClassifyRegularEquivDialog(Dialog):
                  'ponto de partida. Caso não seja configurada uma ' +
                  'pré-classificação, o algoritmo começará com todos os nodos ' +
                  'em uma mesma classe.',
-            items=self.attrs, selected=self.preClassAttrTxt.get())
+            items=items, selected=self.preClassAttrTxt.get())
 
         if dialog.result is not None:
             for i, v in dialog.result:
@@ -1474,7 +1476,7 @@ class ClassifyRegularEquivDialog(Dialog):
                  'A escolha pode ser buscar o tipo pela relação das arestas ' +
                  'no grafo, ou considerar o valor de um atributo de aresta ' +
                  'como o tipo da aresta.',
-            items=self.attrs, selected=self.preClassAttrTxt.get())
+            items=items, selected=self.preClassAttrTxt.get())
 
         if dialog.result is not None:
             for i, v in dialog.result:
