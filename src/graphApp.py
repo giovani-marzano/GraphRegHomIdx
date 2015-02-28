@@ -1466,7 +1466,7 @@ class ClassifyRegularEquivDialog(Dialog):
                 self.preClassAttrTxt.set(v)
 
     def _doBtnChooseEdgeClass(self):
-        items = ['<relação da aresta>'] + self.nodeAttrs
+        items = ['<relação da aresta>'] + self.edgeAttrs
         idxShift = 1
 
         dialog = gui.ListSelectionDialog(self,
