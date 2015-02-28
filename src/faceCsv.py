@@ -38,6 +38,10 @@ CSV_OPTIONS = {
 
 if __name__ == '__main__':
 
+    if len(sys.argv) < 3:
+        print('Usage: {0} arqIn arqOut'.format(sys.argv[0]))
+        sys.exit()
+
     pesos = {}
 
     def addEdge(src, tgt, rel):
