@@ -144,7 +144,7 @@ def main(log):
     tiposInteracoes = geral.getEdgeAttrValueSet(RELATION_ATTR);
     log.info('Tipos de relacionamentos no grafo: '+str(list(tiposInteracoes)))
 
-    processamentoTiposArestasAgregados(geral, log, tiposInteracoes)
+    # processamentoTiposArestasAgregados(geral, log, tiposInteracoes)
 
     for tipo in tiposInteracoes:
         grafoEquivRegularSoUmTipoAresta(geral, tipo, log)
@@ -310,12 +310,78 @@ def criaSOMGridParaNodos(log, elements, nodeInterations):
             attrNames=nodeInterations, nodeIDAttr='ID')
     gsom.writeGraphml(ARQ_SOM_GRID_NODES)
 
+
+class CtrlRegEquiv(object):
+    def __init__(self, graph, tipo, classAttr, iterLimit, dirOut, log):
+        self.log = log
+        self.tipo = tipo
+        self.graph = graph
+        self.classAttr = classAttr
+        self.iterLimit = iterLimit
+        self.filename = os.path.join(dirOut,'classes_'+tipo+'.csv')
+        self.filenameGraph = os.path.join(dirOut,tipo)
+
+        self.classesVet = []
+        self.iterations = 0
+
+    def procIteration(self, i, classes, done):
+        if i == 1:
+            self.log.info('RegEquiv {0}:'.format(self.tipo))
+        self.log.info('    iteration: {0}'.format(i))
+        if not done:
+            self.classesVet.append(classes)
+            self.iterations = i
+
+        if done or i >= self.iterLimit:
+            spec = gr.AttrSpec(self.classAttr,'int')
+            self.graph.addNodeAttrSpec(spec)
+            self.graph.setNodeAttrFromDict(self.classAttr, classes)
+            self.log.info('RegEquiv: {0} done'.format(self.tipo))
+
+        return i < self.iterLimit
+
+    def writeResult(self):
+        self.log.info('Salvando {0}...'.format(self.filename))
+        with open( self.filename, 'w', newline='') as f:
+            writer = csv.writer(f)
+
+            row = ['node'] + ['regClass_'+str(i) for i in range(self.iterations)]
+            writer.writerow(row)
+
+            for c in self.classesVet:
+                keys = sorted(c.keys())
+                break
+
+            for k in keys:
+                row = [k] + [c[k] for c in self.classesVet]
+                writer.writerow(row)
+        self.log.info('...ok')
+
+        # end with
+
+        for i, classes in enumerate(self.classesVet):
+            classAttr = self.classAttr + str(i + 1)
+            spec = gr.AttrSpec(classAttr,'int')
+            self.graph.addNodeAttrSpec(spec)
+            self.graph.setNodeAttrFromDict(classAttr, classes)
+
+        for i in range(self.iterations):
+            classAttr = self.classAttr + str(i + 1)
+            g = self.graph.spawnFromClassAttributes(nodeClassAttr=classAttr,
+                    edgeClassAttr=RELATION_ATTR)
+            filename = self.filenameGraph + '_' + classAttr
+            self.log.info('Salvando grafo {} com {} nodos e {} arestas...'.format(filename,
+                    g.getNumNodes(), g.getNumEdges()))
+            g.writeGraphml(filename)
+            self.log.info('...ok')
+
 def grafoEquivRegularSoUmTipoAresta(a, tipo, log):
     """Extrai do grafo original o subgrafo que possui apenas um dos tipos de
     aresta e produz o menor grafo de classes de equivalencia regular deste
     subgrafo. Anota o grafo original com estatísticas agregadas dos pesos de
     arestas.
     """
+    nodeClassAttr = 'class'
     b = a.spawnFromClassAttributes(edgeClassAttr=RELATION_ATTR)
 
     tipo, b.getNumNodes(), b.getNumEdges()
@@ -328,21 +394,25 @@ def grafoEquivRegularSoUmTipoAresta(a, tipo, log):
     b.removeEdgeByAttr('filtro', 0)
     log.info('Numero de arestas do tipo {}: {}'.format(tipo, b.getNumEdges()))
 
+    ctrl = CtrlRegEquiv(graph=b, tipo=tipo, iterLimit=20, dirOut=DIR_OUTPUT,
+            log=log, classAttr=nodeClassAttr)
+
     log.info("Calculando equivalencia regular para '{}'...".format(tipo))
-    b.classifyNodesRegularEquivalence('class')
+    gr.regularEquivalence(b, ctrlFunc=ctrl.procIteration)
+    ctrl.writeResult()
     log.info('...ok')
 
     attrName = tipo+'_regularClass'
     spec = gr.AttrSpec(attrName, 'int')
     a.addNodeAttrSpec(spec)
     for node in b.nodes():
-        a.setNodeAttr(node, attrName, b.getNodeAttr(node, 'class'))
+        a.setNodeAttr(node, attrName, b.getNodeAttr(node, nodeClassAttr))
 
     nodeAttrs, edgeAttrs, nodeSpecs, edgeSpecs = gr.aggregateClassAttr(a,
         nodeClassAttr=attrName, edgeClassAttr=RELATION_ATTR,
         edgeAttrs=[WEIGHT_ATTR])
 
-    b = b.spawnFromClassAttributes(nodeClassAttr='class',
+    b = b.spawnFromClassAttributes(nodeClassAttr=nodeClassAttr,
             edgeClassAttr=RELATION_ATTR)
 
     components = gr.weaklyConnectedComponents(b)
