@@ -8,13 +8,39 @@ from itertools import chain
 
 EDGE_RELATION_ATTR='_relation'
 
-def regularEquivalence(graph, preClassAttr=None, edgeClassAttr=None):
+def _trueFunc(*argv, **argd):
+    """Função que só retorna True"""
+    return True
+
+def regularEquivalence(graph, preClassAttr=None, edgeClassAttr=None,
+    ctrlFunc=_trueFunc):
     """Cria um mapeamento dos nodos do grafo a uma classe de equivalência
     regular.
 
-    :param graph: Grafo a ser processado
-    :return: mapa de nodos a um inteiro que representa a classe de
-        equivalência a que pertence.
+    Args:
+        - graph: Grafo a ser processado
+        - [preClassAttr]: Atributo de nodo que indica uma pré classificação dos
+              nodos. O algoritmo considera esta classificação como classificação
+              inicial.
+        - [edgeClassAttr]: Atributo de aresta que indica a classe da aresta. Se
+              'None', a relação da aresta será utilizada.
+        - [ctrlFunc]: Função que permite o acompanhamento e a interrupção
+              prematura do algoritmo.
+
+              ctrlFunc(itCount, classesNow, done) -> continue
+
+                Args:
+                    - itCount: Número da iteração atual começãndo em 1
+                    - classesNow: Classificação dos nodos até o momento
+                    - done: True se já se atingiu a classificação final
+
+                Return:
+                    True: para que o algoritmo continue com a próxima iteração
+                    False: para interromper o algoritmo
+
+    Return:
+        mapa de nodos a um inteiro que representa a classe de equivalência a que
+        pertence.
     """
 
     if edgeClassAttr is None:
@@ -43,8 +69,10 @@ def regularEquivalence(graph, preClassAttr=None, edgeClassAttr=None):
 
     classesNow = {node:None for _, node in nodes}
     changed = True
+    keepGoing = True
+    itCount = 1
 
-    while changed:
+    while keepGoing:
         changed = False
         for nodeNumber, n1 in nodes:
             if classesNow[n1] is not None:
@@ -78,13 +106,16 @@ def regularEquivalence(graph, preClassAttr=None, edgeClassAttr=None):
                     classesNow[n2] = classesNow[n1]
                     if classesNow[n2] != classesAnt[n2]:
                         changed = True
+        # end for n1
+
+        keepGoing = ctrlFunc(itCount, classesNow, not changed)
+
+        keepGoing = keepGoing and changed
+        itCount += 1
 
         # Preparando os vetores de classes para a próxima iteração
-        classesAux = classesAnt
         classesAnt = classesNow
-        classesNow = classesAux
-        for node in classesAux.keys():
-            classesNow[node] = None
+        classesNow = {node:None for _, node in nodes}
 
     return classesAnt
 
@@ -335,7 +366,7 @@ class MultiGraph(object):
         return self.edgeAttrs.get(attr, {}).get(edge, dflt)
 
     def classifyNodesRegularEquivalence(self, classAttr='class',
-            preClassAttr=None, edgeClassAttr=None):
+            preClassAttr=None, edgeClassAttr=None, ctrlFunc=_trueFunc):
         """Cria um atributo de nodos que os particiona em classes de
         equivalência de uma equivalência regular.
 
@@ -343,7 +374,8 @@ class MultiGraph(object):
         equivalência a que o nodo foi atribuído.
         """
 
-        classes = regularEquivalence(self, preClassAttr, edgeClassAttr)
+        classes = regularEquivalence(self, preClassAttr, edgeClassAttr,
+                ctrlFunc)
         spec = AttrSpec(classAttr,'int')
         self.addNodeAttrSpec(spec)
         self.setNodeAttrFromDict(classAttr, classes)
@@ -553,8 +585,8 @@ class AttrSpec(object):
             return int(value)
         else:
             return value
-    
-def _computeAgregateFromSums(attr, specList, attrDicts, counts, sums, sumSqs):
+
+def _computeAggregateFromSums(attr, specList, attrDicts, counts, sums, sumSqs):
     attrNameCount = attr+'_count'
     specList.append(AttrSpec(attrNameCount, 'int',0))
     attrDicts[attrNameCount] = {}
@@ -667,7 +699,7 @@ def aggregateClassAttr(gOri, nodeClassAttr=None, edgeClassAttr=None, nodeAttrs=N
     nodeAttrDicts[attrName] = dict(nodeClassCounts)
 
     for attr in nodeAttrs:
-        _computeAgregateFromSums(attr, nodeSpecs, nodeAttrDicts, nodeAttrCounts,
+        _computeAggregateFromSums(attr, nodeSpecs, nodeAttrDicts, nodeAttrCounts,
                 nodeAttrSums, nodeAttrSumSqs)
 
     # Computing edge attrs
@@ -691,7 +723,7 @@ def aggregateClassAttr(gOri, nodeClassAttr=None, edgeClassAttr=None, nodeAttrs=N
         edgeAttrDicts[attrName][edge] = len(s)
 
     for attr in edgeAttrs:
-        _computeAgregateFromSums(attr, edgeSpecs, edgeAttrDicts, edgeAttrCounts,
+        _computeAggregateFromSums(attr, edgeSpecs, edgeAttrDicts, edgeAttrCounts,
                 edgeAttrSums, edgeAttrSumSqs)
 
     return nodeAttrDicts, edgeAttrDicts, nodeSpecs, edgeSpecs
@@ -740,7 +772,7 @@ def weaklyConnectedComponents(g):
                 stack.append(n2)
 
     return components
-            
+
 def _createXmlKeyForAttrs(root, attrNames, attrSpecs, attrIds, forElem):
     for attr in attrNames:
         attrSpec = attrSpecs[attr]
