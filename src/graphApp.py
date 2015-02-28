@@ -240,7 +240,7 @@ class GraphAppControl(object):
                         weightAttr = row[weightCol].strip()
                     break
 
-            spec = gr.AttrSpec(weightAttr, 'float', 1.0)
+            spec = gr.AttrSpec(weightAttr, 'double', 1.0)
             g.addEdgeAttrSpec(spec)
             spec = gr.AttrSpec(relationAttr, 'string')
             g.addEdgeAttrSpec(spec)
