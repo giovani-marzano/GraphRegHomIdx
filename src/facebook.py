@@ -281,7 +281,7 @@ def processaGrafoAgregadoComSOM(g, log, nodeInterations, edgeInterations):
             edgeClassAttr='SOM_class')
 
     # Computando atributos agregados
-    attrNodes, attrEdges, specNodes, specEdges = gr.agregateClassAttr(g,
+    attrNodes, attrEdges, specNodes, specEdges = gr.aggregateClassAttr(g,
         nodeClassAttr='SOM_class', edgeClassAttr='SOM_class',
         nodeAttrs=nodeInterations, edgeAttrs=edgeInterations)
 
@@ -338,7 +338,7 @@ def grafoEquivRegularSoUmTipoAresta(a, tipo, log):
     for node in b.nodes():
         a.setNodeAttr(node, attrName, b.getNodeAttr(node, 'class'))
 
-    nodeAttrs, edgeAttrs, nodeSpecs, edgeSpecs = gr.agregateClassAttr(a,
+    nodeAttrs, edgeAttrs, nodeSpecs, edgeSpecs = gr.aggregateClassAttr(a,
         nodeClassAttr=attrName, edgeClassAttr=RELATION_ATTR,
         edgeAttrs=[WEIGHT_ATTR])
 

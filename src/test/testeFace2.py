@@ -24,7 +24,7 @@ def grafoSoUmTipoAresta(a, tipo):
     for node in b.nodes():
         a.setNodeAttr(node, attrName, b.getNodeAttr(node, 'class'))
 
-    nodeAttrs, edgeAttrs, nodeSpecs, edgeSpecs = gr.agregateClassAttr(b,
+    nodeAttrs, edgeAttrs, nodeSpecs, edgeSpecs = gr.aggregateClassAttr(b,
         nodeClassAttr='class', edgeClassAttr='Relationship',
         edgeAttrs=['Edge Weight'])
 

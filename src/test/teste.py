@@ -1,8 +1,8 @@
-from graph import loadGraphml, AttrSpec, agregateClassAttr
+from graph import loadGraphml, AttrSpec, aggregateClassAttr
 
 a = loadGraphml('data/teste.graphml', relationAttr='class')
 
-nodeAttr, edgeAttr, nodeSpecs, edgeSpecs = agregateClassAttr(a, 'class', 'class', ['dias'],
+nodeAttr, edgeAttr, nodeSpecs, edgeSpecs = aggregateClassAttr(a, 'class', 'class', ['dias'],
 ['weight'])
 
 b = a.spawnFromClassAttributes(nodeClassAttr='class',edgeClassAttr='class')
@@ -19,7 +19,7 @@ b.writeGraphml('data/b')
 
 a.classifyNodesRegularEquivalence(classAttr='regClass')
 
-nodeAttr, edgeAttr, nodeSpecs, edgeSpecs = agregateClassAttr(a, 'regClass', 'class', ['dias'],
+nodeAttr, edgeAttr, nodeSpecs, edgeSpecs = aggregateClassAttr(a, 'regClass', 'class', ['dias'],
 ['weight'])
 
 b = a.spawnFromClassAttributes(nodeClassAttr='regClass',edgeClassAttr='class')

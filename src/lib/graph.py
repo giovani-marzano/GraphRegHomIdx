@@ -581,7 +581,7 @@ def _computeAgregateFromSums(attr, specList, attrDicts, counts, sums, sumSqs):
             attrDicts[attrNameMean][key] = mean
             attrDicts[attrNameStdev][key] = stdev
 
-def agregateClassAttr(gOri, nodeClassAttr=None, edgeClassAttr=None, nodeAttrs=None, edgeAttrs=None):
+def aggregateClassAttr(gOri, nodeClassAttr=None, edgeClassAttr=None, nodeAttrs=None, edgeAttrs=None):
     """Cria dados agregados de atributos agrupados pelos valores dos atributos
     classificadores de nodos e arestas fornecidos.
 
