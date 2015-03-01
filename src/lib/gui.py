@@ -6,6 +6,16 @@ import re
 from queue import Queue, Empty
 import threading
 import textwrap
+import traceback
+
+def showExceptionMsg(exception, text, logger=None):
+    errmsg = str(exception)
+    if logger is not None:
+        logger.error(errmsg)
+        trace = traceback.format_exc()
+        logger.debug(trace)
+    tk.messagebox.showerror('Erro',
+            text+'\n\n'+errmsg)
 
 class ListSelecOneFrame(ttk.Frame):
     def __init__(self, master, filterText='', **options):
@@ -372,11 +382,12 @@ class ListSelecManyDialog(Dialog):
 
 
 class ExecutionDialog(object):
-    def __init__(self, master, command, title='Executando...'):
+    def __init__(self, master, command, title='Executando...', logger=None):
 
         self.queue = Queue()
         self.master = master
         self.command = command
+        self.logger = logger
 
         t = threading.Thread(target=self.execThread)
 
@@ -387,6 +398,8 @@ class ExecutionDialog(object):
         self.window.focus_set()
         self.window.protocol('WM_DELETE_WINDOW', self.closeCallback)
 
+        l = ttk.Label(self.window, text='Aguarde...')
+        l.pack()
         p = ttk.Progressbar(self.window, orient=tk.HORIZONTAL, mode='indeterminate')
         p.pack(expand=True, fill='both')
         p.start()
@@ -414,7 +427,12 @@ class ExecutionDialog(object):
             self.command()
             self.queue.put(('END',))
         except Exception as ex:
-            self.queue.put(('ERROR',str(ex)))
+            errmsg = str(ex)
+            if self.logger is not None:
+                self.logger.error(errmsg)
+                trace = traceback.format_exc()
+                self.logger.debug(trace)
+            self.queue.put(('ERROR',errmsg))
             raise ex
 
     def periodicPool(self):
