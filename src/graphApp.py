@@ -318,7 +318,7 @@ class GraphAppControl(object):
                 ids = extractId(row, itemNum)
                 for i, spec in enumerate(attrSpecs):
                     value = row[attrCols[i]]
-                    value = spec.strToType(value)
+                    value = spec.fromStr(value)
                     attrDicts[spec.name][ids] = value
                 itemNum += 1
 

@@ -9,12 +9,25 @@ class NumericAggregator(object):
     sobre a sequência de números processada.
     """
 
+    STAT_SET = {'count', 'sumX', 'sumX2', 'min', 'max', 'mean', 'var',
+        'sampleVar', 'stdef', 'sampleStdev'}
+
     def __init__(self):
         self._count = 0
         self._sum = 0.0
         self._sumOfSquares = 0.0
         self._min = float('inf')
         self._max = float('-inf')
+
+    @staticmethod
+    def getStatType(stat):
+        if stat not in NumericAggregator.STAT_SET:
+            raise ValueError('Invalid stat "{0}"'.format(stat))
+
+        if stat == 'count':
+            return int
+        else:
+            return float
 
     @property
     def count(self):
@@ -90,11 +103,13 @@ class NumericAggregator(object):
                 d_max = other._max
         elif (isinstance(other,int) or
               isinstance(other,float)):
-                d_count = 1
-                d_sum = other
-                d_sumOfSquares = other**2
-                d_min = other
-                d_max = other
+            d_count = 1
+            d_sum = other
+            d_sumOfSquares = other**2
+            d_min = other
+            d_max = other
+        elif other is None:
+            d_count = 0
         else:
             return NotImplemented
 
@@ -109,7 +124,7 @@ class NumericAggregator(object):
 
         return self
 
-    def __add__(self, other)
+    def __add__(self, other):
         v = Aggregate()
         v += self
         v += other

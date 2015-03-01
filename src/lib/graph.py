@@ -5,6 +5,7 @@ import math
 import xml.etree.ElementTree as ET
 from collections import Counter, defaultdict
 from itertools import chain
+from aggregate import NumericAggregator
 
 EDGE_RELATION_ATTR='_relation'
 
@@ -120,6 +121,9 @@ def regularEquivalence(graph, preClassAttr=None, edgeClassAttr=None,
     return classesAnt
 
 class MultiGraph(object):
+    SCOPE_NODE = 'node'
+    SCOPE_EDGE = 'edge'
+
     def __init__(self):
         self._adjOut = {}
         self._adjIn = {}
@@ -132,6 +136,21 @@ class MultiGraph(object):
         self.edgeAttrSpecs = {}
         self.graphAttrSpecs = {}
         self.graphAttrs = {}
+
+        self.attrs = {
+            MultiGraph.SCOPE_NODE: self.nodeAttrs,
+            MultiGraph.SCOPE_EDGE: self.edgeAttrs
+        }
+
+        self.attrSpecs = {
+            MultiGraph.SCOPE_NODE: self.nodeAttrSpecs,
+            MultiGraph.SCOPE_EDGE: self.edgeAttrSpecs
+        }
+
+        self.aggregators = {
+            MultiGraph.SCOPE_NODE: {},
+            MultiGraph.SCOPE_EDGE: {}
+        }
 
     def addNode(self, node):
         if node not in self._adjOut:
@@ -273,6 +292,12 @@ class MultiGraph(object):
         if attrName in self.edgeAttrs:
             del self.edgeAttrs[attrName]
 
+    def addAttrSpec(self, scope, attrSpec):
+        self.attrSpecs[scope][attrSpecs.name] = attrSpec
+
+    def getAttrSpec(self, scope, attrName):
+        return self.attrSpecs[scope].get(attrName)
+
     def getNodeAttrValueSet(self, attrName, default=None):
         """Recupera o conjunto dos valores distintos de um atributo de nodo
         """
@@ -346,24 +371,118 @@ class MultiGraph(object):
         return self.graphAttrs.get(attr, dflt)
 
     def setNodeAttr(self, node, attr, value):
-        attrDict = self.nodeAttrs.setdefault(attr, {})
-        attrDict[node] = value
+        self.setElemAttr(MultiGraph.SCOPE_NODE, node, attr, value)
 
     def getNodeAttr(self, node, attr, dflt=None):
-        spec = self.nodeAttrSpecs.get(attr)
-        if spec is not None and spec.default is not None:
-            dflt = spec.default
-        return self.nodeAttrs.get(attr, {}).get(node, dflt)
+        return self.getElemAttr(MultiGraph.SCOPE_NODE, node, attr, dflt)
 
     def setEdgeAttr(self, edge, attr, value):
-        attrDict = self.edgeAttrs.setdefault(attr, {})
-        attrDict[edge] = value
+        self.setElemAttr(MultiGraph.SCOPE_EDGE, edge, attr, value)
 
     def getEdgeAttr(self, edge, attr, dflt=None):
-        spec = self.edgeAttrSpecs.get(attr)
-        if spec is not None and spec.default is not None:
-            dflt = spec.default
-        return self.edgeAttrs.get(attr, {}).get(edge, dflt)
+        return self.getElemAttr(MultiGraph.SCOPE_EDGE, edge, attr, dflt)
+
+    def getElemAttr(self, scope, elem, attr, dflt=None):
+        if dflt is None:
+            spec = self.attrSpecs[scope].get(attr)
+            if spec is not None:
+                dflt = spec.default
+        return self.attrs[scope].get(attr,{}).get(elem, dflt)
+
+    def setElemAttr(self, scope, elem, attr, value):
+        attrDict = self.attrs[scope].setdefault(attr, {})
+        attrDict[elem] = value
+
+    def elements(self, scope):
+        if scope == MultiGraph.SCOPE_NODE:
+            return self.nodes()
+        elif scope == MultiGraph.SCOPE_EDGE:
+            return self.edges()
+        else:
+            raise ValueError('Invalid scope {0}'.format(scope))
+
+    def addAggregator(self, scope, name, initValue=None):
+        """Adiciona um novo agregador zerado ao grafo.
+
+        Args:
+            - scope: Escopo do agregador: SCOPE_EDGE ou SCOPE_NODE
+            - name: Nome para o agregador
+            - initValue: Valor de inicialização
+        """
+        aggrMap = {}
+
+        self.aggregators[scope][name] = aggrMap
+
+
+    def removeAggregator(self, scope, name):
+        if scope not in self.aggregators:
+            return
+
+        if name not in self.aggregators[scope]:
+            return
+
+        del self.aggregators[scope][name]
+
+    def createAggregatorFromAttribute(self, scope, attrName):
+        """Cria um aggregador para os elementos do grafo que terá o mesmo nome
+        do atributo fornecido e será inicializado com os valores deste atributo.
+
+        Args:
+            - scope: Escopo do agregador: SCOPE_EDGE ou SCOPE_NODE
+            - name: Nome para o agregador
+        """
+
+        aggrMap = self.addAggregator(scope, attrName)
+        for elem in self.elements(scope):
+            v = self.getElemAttr(scope, elem, attrName)
+            aggrMap[elem] += v
+
+    def getAggregator(self, scope, name):
+        """Recupera o mapa de agregadores de nome 'name' para o escopo de
+        elementos indicado.
+
+        Args:
+            scope: Escopo de elementos do grafo
+            name: Nome do agregador
+        Return:
+            Mapa de agregadores ou 'None' caso não exista
+        """
+        return self.aggregators[scope].get(name)
+
+    def getElemAggregator(self, scope, elem, name):
+        aggrMap = self.getAggregator(name)
+
+        if aggrMap is None:
+            raise KeyError(
+                'Aggregator "{0}" does not exists in scope "{1}"'.format(
+                    name, scope))
+
+        return aggrMap.setdefault(elem,NumericAggregator())
+
+    def getAggregatorNames(self, scope):
+        return set(self.aggregators[scope].keys())
+
+    def createAttributesFromAggregator(self, scope, name, stats):
+        if not set(stats).isubsetof(NumericAggregator.STAT_SET):
+            raise ValueError('Invalid stats: {0}'.format(str(set(stats) -
+                            NumericAggregator.STAT_SET)))
+
+        aggrMap = self.getAggregator(scope, name)
+
+        if aggrMap is None:
+            raise KeyError(
+                'There is no aggregator named "{0}" of scope "{1}"'.format(
+                    name, scope))
+
+        for stat in stats:
+            statType = NumericAggregator.getStatType(stat)
+            spec = AttrSpec(name+'_'+stat, statType)
+            self.addAttrSpec(scope, spec)
+            for elem in self.elements(scope):
+                aggr = aggrMap.get(elem)
+                if aggr:
+                    v = getattr(aggr, stat)
+                self.setElemAttr(scope, elem, spec.name, v)
 
     def classifyNodesRegularEquivalence(self, classAttr='class',
             preClassAttr=None, edgeClassAttr=None, ctrlFunc=_trueFunc):
@@ -426,14 +545,56 @@ class MultiGraph(object):
 
         newGraph = MultiGraph()
 
+        nodeAggrNames = self.getAggregatorNames(self.SCOPE_NODE)
+        edgeAggrNames = self.getAggregatorNames(self.SCOPE_EDGE)
+
+        for name in nodeAggrNames:
+            newGraph.addAggregator(self.SCOPE_NODE, name)
+        for name in edgeAggrNames:
+            newGraph.addAggregator(self.SCOPE_EDGE, name)
+
+        # Estatísticas de regularidade
+        nodeHits = {}
+        edgeSrcSets = {}
+        edgeTgtSets = {}
+        edgeHits = {}
+
         for node in self.nodes():
             newNode = nodeClass(node)
             newGraph.addNode(newNode)
+
+            for aggr in nodeAggrNames:
+                v = self.getElemAggregator(self.SCOPE_NODE, node, aggr)
+                vnew = newGraph.getElemAggregator(self.SCOPE_NODE, newNode,
+                        aggr)
+                vnew += v
+
+            hits = nodeHits.get(newNode,0)
+            hits += 1
+            nodeHits[newNode] = hits
 
         for edge in self.edges():
             src, tgt, rel = edge
             newEdge = (nodeClass(src), nodeClass(tgt), edgeClass(edge))
             newGraph.addEdge(newEdge[0], newEdge[1], newEdge[2])
+
+            for aggr in edgeAggrNames:
+                v = self.getElemAggregator(self.SCOPE_EDGE, edge, aggr)
+                vnew = newGraph.getElemAggregator(self.SCOPE_EDGE, newEdge,
+                        aggr)
+                vnew += v
+
+            hits = edgeHits.get(newEdge,0)
+            hits += 1
+            edgeHits[newEdge] = hits
+
+            s = edgeSrcSets.setdefault(newEdge, set())
+            s.add(newEdge[0])
+            s = edgeTgtSets.setdefault(newEdge, set())
+            s.add(newEdge[1])
+
+        edgeSrcHits = {e: len(s) for e, s in edgeSrcSets.items()}
+        edgeTgtHits = {e: len(s) for e, s in edgeTgtSets.items()}
 
         if nodeClassAttr is not None:
             spec = self.getNodeAttrSpec(nodeClassAttr)
@@ -441,6 +602,9 @@ class MultiGraph(object):
                 newGraph.addNodeAttrSpec(spec)
             for node in newGraph.nodes():
                 newGraph.setNodeAttr(node, nodeClassAttr, node)
+        else:
+            # Para acrescentar atributos para as estatísticas coletadas
+            nodeClassAttr = 'node'
 
         if edgeClassAttr is not None:
             spec = self.getEdgeAttrSpec(edgeClassAttr)
@@ -448,6 +612,18 @@ class MultiGraph(object):
                 newGraph.addEdgeAttrSpec(spec)
             for edge in newGraph.edges():
                 newGraph.setEdgeAttr(edge, edgeClassAttr, edge[2])
+        else:
+            # Para acrescentar atributos para as estatísticas coletadas
+            edgeClassAttr = 'edge'
+
+        newGraph.setNodeAttrFromDict(nodeClassAttr+'_count', nodeHits,
+                default=0, attrType=int)
+        newGraph.setEdgeAttrFromDict(edgeClassAttr+'_srcCount', edgeSrcHits,
+                default=0, attrType=int)
+        newGraph.setEdgeAttrFromDict(edgeClassAttr+'_tgtCount', edgeTgtHits,
+                default=0, attrType=int)
+        newGraph.setEdgeAttrFromDict(edgeClassAttr+'_count', edgeHits,
+                default=0, attrType=int)
 
         return newGraph
 
@@ -548,11 +724,15 @@ class AttrSpec(object):
 
     def __init__(self, attr_name, attr_type, default=None):
         self.name = attr_name
-        self.type = attr_type
+
+        if isinstance(attr_type, str):
+            self.type = attr_type
+        else:
+            self.type = self.typeFromPythonType(attr_type)
 
         self.setDefault(default)
 
-    def strToType(self, strValue):
+    def fromStr(self, strValue):
         if self.type == 'float' or self.type == 'double':
             return float(strValue)
         if self.type == 'int' or self.type == 'long':
@@ -562,9 +742,23 @@ class AttrSpec(object):
         else:
             return strValue
 
+    @staticmethod
+    def typeFromPythonType(pytype):
+        if pytype == int:
+            return 'int'
+        elif pytype == float:
+            return 'double'
+        elif pytype == str:
+            return 'string'
+        elif pytype == bool:
+            return 'boolean'
+        else:
+            raise ValueError('Python type "{0}" not recognized'.format(
+                str(pytype)))
+
     def setDefault(self,dfltValue):
         if isinstance(dfltValue, str):
-            dfltValue = self.strToType(dfltValue.strip())
+            dfltValue = self.fromStr(dfltValue.strip())
         self.default = dfltValue
 
     def getGraphmlType(self):
@@ -899,7 +1093,7 @@ def loadGraphml(fileName, relationAttr=EDGE_RELATION_ATTR):
         key = xdata.get('key')
         if key in graphAttrs:
             attrSpec = graphAttrs[key]
-            value = attrSpec.strToType(xdata.text)
+            value = attrSpec.fromStr(xdata.text)
             if value != attrSpec.default:
                 graph.setGraphAttr(attrSpec.name, value)
 
@@ -916,7 +1110,7 @@ def loadGraphml(fileName, relationAttr=EDGE_RELATION_ATTR):
             if key in nodeAttrs:
                 attrSpec = nodeAttrs[key]
                 graph.setNodeAttr(nid, attrSpec.name,
-                    attrSpec.strToType(xdata.text))
+                    attrSpec.fromStr(xdata.text))
 
     for xedge in xgraph.iterfind('g:edge', namespaces):
         src = xedge.get('source')
@@ -927,7 +1121,7 @@ def loadGraphml(fileName, relationAttr=EDGE_RELATION_ATTR):
             rel = attrSpec.default
             xdata = xedge.find("g:data[@key='"+relationKey+"']", namespaces)
             if xdata is not None:
-                rel = attrSpec.strToType(xdata.text)
+                rel = attrSpec.fromStr(xdata.text)
         else:
             rel = 0
             while graph.hasEdge(src,tgt,rel):
@@ -944,7 +1138,7 @@ def loadGraphml(fileName, relationAttr=EDGE_RELATION_ATTR):
             if key in edgeAttrs:
                 attrSpec = edgeAttrs[key]
                 graph.setEdgeAttr(edge, attrSpec.name,
-                    attrSpec.strToType(xdata.text))
+                    attrSpec.fromStr(xdata.text))
 
     for attrSpec in graphAttrs.values():
         graph.addGraphAttrSpec(attrSpec)
