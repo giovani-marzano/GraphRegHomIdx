@@ -513,6 +513,7 @@ import tkinter.ttk as ttk
 from tkinter.simpledialog import Dialog
 import gui
 import textwrap
+from queue import Queue, Empty
 
 class GraphAppGUI(tk.Frame):
     def __init__(self, master, control, logger, **options):
@@ -546,9 +547,25 @@ class GraphAppGUI(tk.Frame):
 
         self._createMenu()
 
-        control.addInsertHandler(self.updateGraphView)
-        control.addChangeHandler(self.updateGraphView)
-        control.addDeleteHandler(self.removeGraphView)
+        self._queue = Queue()
+
+        control.addInsertHandler(self.sheduleUpdate)
+        control.addChangeHandler(self.sheduleUpdate)
+        control.addDeleteHandler(self.sheduleRemove)
+
+    def sheduleUpdate(self, gmod):
+        self._queue.put((self.updateGraphView, [gmod]))
+
+    def sheduleRemove(self, gmod):
+        self._queue.put((self.removeGraphView, [gmod]))
+
+    def consumeQueue(self):
+        try:
+            while True:
+                func, args = self._queue.get(False)
+                func(*args)
+        except Empty:
+            pass
 
     def getGraphAndTreeIid(self, graphId):
         """Retrieve the graph's Treeview iid and it's GraphModel if they exist.
@@ -756,6 +773,7 @@ class GraphAppGUI(tk.Frame):
         if gsel is not None:
             gsel = gsel.name
         d = ImportAttributesDialog(self, self.control, attrScope, gsel)
+        self.consumeQueue()
 
     def menuCmdImportEdgeAttr(self):
         self._cmdImportAttr('edge')
@@ -768,6 +786,7 @@ class GraphAppGUI(tk.Frame):
         if gsel is not None:
             gsel = gsel.name
         d = ExportAttributesDialog(self, self.control, attrScope, gsel)
+        self.consumeQueue()
 
     def menuCmdExportEdgeAttr(self):
         self._cmdExportAttr('edge')
@@ -780,12 +799,15 @@ class GraphAppGUI(tk.Frame):
 
     def menuCmdNewGraph(self):
         dialog = NewGraphDialog(self, self.control)
+        self.consumeQueue()
 
     def menuCmdOpenGraphml(self):
         dialog = OpenGraphmlDialog(self, self.control)
+        self.consumeQueue()
 
     def menuCmdOpenCsvEdges(self):
         dialog = OpenCsvEdgesDialog(self, self.control)
+        self.consumeQueue()
 
     def menuCmdRemoveGraph(self):
         items = self.control.getGraphNames()
@@ -798,6 +820,7 @@ class GraphAppGUI(tk.Frame):
         if dialog.result is not None:
             for i, selection in dialog.result:
                 self.control.removeGraph(selection)
+        self.consumeQueue()
 
     def menuCmdSaveGraphml(self):
         items = self.control.getGraphNames()
@@ -825,14 +848,18 @@ class GraphAppGUI(tk.Frame):
                 initialdir=dirpath
                 )
             if filename:
-                self.control.saveGraphml(gmod.name, filename)
+                def execute():
+                    self.control.saveGraphml(gmod.name, filename)
+                gui.ExecutionDialog(master=self, command=execute,
+                        logger=self.control.logger)
+                self.consumeQueue()
 
     def menuCmdClassifyRegularEquiv(self):
         gsel = self.getSelectedGraph()
         if gsel is not None:
             gsel = gsel.name
         d = ClassifyRegularEquivDialog(self, self.control, gsel)
-
+        self.consumeQueue()
 
 class AttributeConfigFrame(ttk.Frame):
     def __init__(self, master, numAttrs, **options):
@@ -984,14 +1011,6 @@ def createOptionsCsvColumnSelection(colHeadings, hasHeadindRow=True,
             items.append(fmt.format(i))
 
     return items, idxShift
-
-def showExceptionMsg(exception, text, logger):
-    errmsg = str(exception)
-    logger.error(errmsg)
-    trace = traceback.format_exc()
-    logger.debug(trace)
-    tk.messagebox.showerror('Erro',
-            text+'\n\n'+errmsg)
 
 class ImportAttributesDialog(Dialog):
     def __init__(self, master, control, attrScope, selectedGraph=''):
@@ -1237,7 +1256,7 @@ class ImportAttributesDialog(Dialog):
                     attrCols=self.attrCols, attrSpecs=self.attrSpecs,
                     firstRowIsHeading=self.hasHeadingRow.get())
         except Exception as ex:
-            showExceptionMsg(ex, 'Falha na importação de atributos',
+            gui.showExceptionMsg(ex, 'Falha na importação de atributos',
                 self.control.logger)
 
 class ExportAttributesDialog(Dialog):
@@ -1352,12 +1371,13 @@ class ExportAttributesDialog(Dialog):
                 filename=filename,
                 attrScope=self.attrScope, attrNames=self.selectedAttrs)
         except Exception as ex:
-            showExceptionMsg(ex, 'Falha na exportação de atributos',
+            gui.showExceptionMsg(ex, 'Falha na exportação de atributos',
                 self.control.logger)
 
 class ClassifyRegularEquivDialog(Dialog):
     def __init__(self, master, control, selectedGraph=''):
 
+        self.master = master
         self.control = control
 
         self.graphName = tk.StringVar()
@@ -1521,14 +1541,14 @@ class ClassifyRegularEquivDialog(Dialog):
         return isOk
 
     def apply(self):
-        try:
+        def execute():
             self.control.classifyByRegularEquivalence(graphName=self.graphName.get(),
                 classAttr=self.classAttr.get().strip(),
                 preClassAttr=self.preClassAttr,
                 edgeClassAttr=self.edgeClassAttr)
-        except Exception as ex:
-            showExceptionMsg(ex, 'Falha na classificação',
-                self.control.logger)
+
+        gui.ExecutionDialog(master=self.master, command=execute,
+                logger=self.control.logger)
 
 class TestDialog(Dialog):
     def __init__(self, master):
@@ -1577,6 +1597,7 @@ class NewGraphDialog(Dialog):
 class OpenGraphmlDialog(Dialog):
     def __init__(self, master, control):
 
+        self.master = master
         self.control = control
         self.arqIn = tk.StringVar()
         self.name = tk.StringVar()
@@ -1644,15 +1665,11 @@ class OpenGraphmlDialog(Dialog):
         if len(name) == 0:
             name = None
 
-        try:
+        def execute():
             self.control.loadGraphml(filename, name, relation)
-        except Exception as ex:
-            errmsg = str(ex)
-            self.control.logger.error(errmsg)
-            trace = traceback.format_exc()
-            self.control.logger.debug(trace)
-            tk.messagebox.showerror('Erro',
-                'Falha no carregamento: '+ errmsg)
+
+        d = gui.ExecutionDialog(master=self.master, command=execute,
+                logger=self.control.logger)
 
 class OpenCsvEdgesDialog(Dialog):
     IDX_SRC = 0
@@ -1662,6 +1679,7 @@ class OpenCsvEdgesDialog(Dialog):
 
     def __init__(self, master, control):
 
+        self.master = master
         self.control = control
         self.arqIn = tk.StringVar()
         self.name = tk.StringVar()
@@ -1833,14 +1851,14 @@ class OpenCsvEdgesDialog(Dialog):
         if weightCol < 0:
             weightCol = None
 
-        try:
+        def execute():
             self.control.loadCsvGraphEdges(filename=filename,
-                srcNodeCol=srcCol, tgtNodeCol=tgtCol, name=name,
-                relationCol=relCol, weightCol=weightCol,
-                firstRowIsHeading=self.hasHeadingRow.get())
-        except Exception as ex:
-            showExceptionMsg(ex, 'Falha no carregamento',
-                self.control.logger)
+                    srcNodeCol=srcCol, tgtNodeCol=tgtCol, name=name,
+                    relationCol=relCol, weightCol=weightCol,
+                    firstRowIsHeading=self.hasHeadingRow.get())
+
+        d = gui.ExecutionDialog(master=self.master, command=execute,
+                logger=self.control.logger)
 
 #---------------------------------------------------------------------
 # Execução do script
@@ -1854,3 +1872,4 @@ if __name__ == '__main__':
     appGui = GraphAppGUI(app, appControl, logger)
     appGui.pack(expand=True, fill='both')
     app.mainloop()
+    logging.shutdown()
