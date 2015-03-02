@@ -498,8 +498,26 @@ class GraphAppControl(object):
             if edgeClassAttr not in gmod.graph.getEdgeAttrNames():
                 raise KeyError("Atributo de aresta '{0}' não existe".format(edgeClassAttr))
 
-        gmod.graph.classifyNodesRegularEquivalence(classAttr, preClassAttr,
-                edgeClassAttr)
+        classesVet = []
+        def procIteration(i, classes, done):
+            self.logger.info(
+                'Regular equivalence iteration {0} - done {1}'.format(i, done))
+
+            # Não pegamos a última pois é igual à penúltima uma: o algoritmo
+            # para (done = True) quando percebe que não houve alteração entre a
+            # classificação atual e a anterior.
+            if not done:
+                classesVet.append(classes)
+
+            return True
+
+        gr.regularEquivalence(gmod.graph, preClassAttr=preClassAttr,
+            edgeClassAttr=edgeClassAttr, ctrlFunc=procIteration)
+
+        for i, classes in enumerate(classesVet):
+            spec = gr.AttrSpec('{0}_{1}'.format(classAttr, i+1),'int')
+            gmod.graph.addNodeAttrSpec(spec)
+            gmod.graph.setNodeAttrFromDict(spec.name, classes)
 
         self._callChangeHandlers(gmod)
 
