@@ -442,7 +442,7 @@ class GraphAppControl(object):
                 "Escopo de atributo '{0}' desconhecido.".format(attrScope))
 
         if graphName not in self.graphModels.keys():
-            raise ValueError(
+            raise KeyError(
                 "Grafo '{0}' não existe".format(graphName))
 
         gmod = self.graphModels[graphName]
@@ -479,7 +479,7 @@ class GraphAppControl(object):
             preClassAttr=None, edgeClassAttr=None):
 
         if graphName not in self.graphModels.keys():
-            raise ValueError(
+            raise KeyError(
                 "Grafo '{0}' não existe".format(graphName))
 
         gmod = self.graphModels[graphName]
@@ -488,20 +488,101 @@ class GraphAppControl(object):
 
         isOk, errMsg = self.validateNewAttrs(gmod, [spec], 'node')
         if not isOk:
-            raise ValueError("'classAttr' inválido. " + errMsg)
+            raise KeyError("'classAttr' inválido. " + errMsg)
 
         if preClassAttr is not None:
             if preClassAttr not in gmod.graph.getNodeAttrNames():
-                raise ValueError("Atributo de nodo '{0}' não existe".format(preClassAttr))
+                raise KeyError("Atributo de nodo '{0}' não existe".format(preClassAttr))
 
         if edgeClassAttr is not None:
             if edgeClassAttr not in gmod.graph.getEdgeAttrNames():
-                raise ValueError("Atributo de aresta '{0}' não existe".format(edgeClassAttr))
+                raise KeyError("Atributo de aresta '{0}' não existe".format(edgeClassAttr))
 
         gmod.graph.classifyNodesRegularEquivalence(classAttr, preClassAttr,
                 edgeClassAttr)
 
         self._callChangeHandlers(gmod)
+
+    def fullHomomorphism(self, graphName, newGraphName, nodeClassAttr,
+            edgeClassAttr, regIdxPrefix=None):
+
+        if regIdxPrefix:
+            regIdxPrefix = regIdxPrefix.strip()
+
+        if graphName not in self.graphModels.keys():
+            raise KeyError(
+                "Grafo '{0}' não existe".format(graphName))
+
+        gmod = self.graphModels[graphName]
+
+        if newGraphName in self.graphModels.keys():
+            raise ValueError(
+                "Já existe grafo com nome '{0}'".format(newGraphName))
+
+        if nodeClassAttr is not None:
+            if nodeClassAttr not in gmod.graph.getNodeAttrNames():
+                raise KeyError("Atributo de nodo '{0}' não existe".format(nodeClassAttr))
+
+        if edgeClassAttr is not None:
+            if edgeClassAttr not in gmod.graph.getEdgeAttrNames():
+                raise KeyError("Atributo de aresta '{0}' não existe".format(edgeClassAttr))
+
+        newG = gmod.graph.spawnFromClassAttributes(nodeClassAttr=nodeClassAttr,
+                edgeClassAttr=edgeClassAttr)
+
+        # Calculando os índices de regularidade
+        if regIdxPrefix:
+            dTotal = 0
+            nTotal = 0
+
+            nodeTotals = {}
+
+            attrs = {
+                'edge': regIdxPrefix,
+                'edgeTgt': regIdxPrefix+'_tgt',
+                'edgeSrc': regIdxPrefix+'_src'
+            }
+            for _, name in attrs.items():
+                spec = gr.AttrSpec(name, float, 0)
+                newG.addEdgeAttrSpec(spec)
+            for edge in newG.edges():
+                src, tgt, rel = edge
+                ds = newG.getNodeAttr(src, 'node_count')
+                dt = newG.getNodeAttr(tgt, 'node_count')
+                ns = newG.getEdgeAttr(edge, 'edge_srcCount')
+                nt = newG.getEdgeAttr(edge, 'edge_tgtCount')
+                newG.setEdgeAttr(edge, attrs['edge'], (ns+nt)/(ds+dt))
+                newG.setEdgeAttr(edge, attrs['edgeTgt'], (nt)/(dt))
+                newG.setEdgeAttr(edge, attrs['edgeSrc'], (ns)/(ds))
+
+                dTotal += ds + dt
+                nTotal += ns + nt
+
+                n, d = nodeTotals.get(src,(0,0))
+                nodeTotals[src] = (n+ns, d+ds)
+                n, d = nodeTotals.get(tgt,(0,0))
+                nodeTotals[tgt] = (n+nt, d+dt)
+
+            spec = gr.AttrSpec(regIdxPrefix, float, 0)
+            newG.addGraphAttrSpec(spec)
+            newG.setGraphAttr(regIdxPrefix, nTotal/dTotal)
+
+            spec = gr.AttrSpec(regIdxPrefix, float, 0)
+            newG.addNodeAttrSpec(spec)
+            for node in newG.nodes():
+                (n, d) = nodeTotals.get(node,(0,0))
+
+                if d > 0:
+                    newG.setNodeAttr(node, regIdxPrefix, n/d)
+                else:
+                    # O nodo pode não ter arestas
+                    d = newG.getNodeAttr(node, 'node_count')
+                    if d > 0:
+                        newG.setNodeAttr(node, regIdxPrefix, 1.0)
+                    else:
+                        newG.setNodeAttr(node, regIdxPrefix, 0.0)
+
+        self.insertGraph(newG, newGraphName)
 
 #---------------------------------------------------------------------
 # Classes GUI
@@ -519,6 +600,7 @@ class GraphAppGUI(tk.Frame):
     def __init__(self, master, control, logger, **options):
         super().__init__(master, **options)
 
+        self.master = master
         self.control = control
         self.graphToIid = {}
         self.iidToGraph = {}
@@ -631,67 +713,89 @@ class GraphAppGUI(tk.Frame):
         self.iidToGraph[iid] = graphModel
         self.graphToIid[graphModel] = iid
 
-        secId = self.graphTree.insert(iid, 'end',
-            text='Num. nodos:',
-            values=(graphModel.graph.getNumNodes(), 'stats'))
-        secId = self.graphTree.insert(iid, 'end',
-            text='Num. arestas:',
-            values=(graphModel.graph.getNumEdges(), 'stats'))
-
         relations = graphModel.graph.relations
         secId = self.graphTree.insert(iid, 'end',
-            text='Tipos de arestas',
+            text='Relações (tipos de arestas)',
             values=(len(relations), 'relations'))
         for rel in relations:
             self.graphTree.insert(secId, 'end',
                 text=rel,
                 values=('', 'relation'))
 
-        attrNames = graphModel.graph.getGraphAttrNames()
+        names = graphModel.graph.getGraphAttrNames()
         secId = self.graphTree.insert(iid, 'end',
             text='Atributos de grafo',
-            values=(len(attrNames), 'attrs'))
-        for attr in sorted(attrNames):
+            values=(len(names), 'attrs'))
+        for name in sorted(names):
             attrId = self.graphTree.insert(secId, 'end',
-                text=attr,
-                values=(graphModel.graph.getGraphAttr(attr), 'graphAttr'))
-            spec = graphModel.graph.getGraphAttrSpec(attr)
+                text=name,
+                values=(graphModel.graph.getGraphAttr(name), 'graphAttr'))
+            spec = graphModel.graph.getGraphAttrSpec(name)
             if spec is not None:
                 self.graphTree.insert(attrId, 'end',
                     text='Tipo:',
                     values=(spec.type, 'attrType'))
 
-        attrNames = graphModel.graph.getNodeAttrNames()
-        secId = self.graphTree.insert(iid, 'end',
-            text='Atributos de nodo',
-            values=(len(attrNames), 'attrs'))
-        for attr in sorted(attrNames):
+        nodesId = self.graphTree.insert(iid, 'end',
+            text='Nodos',
+            values=(graphModel.graph.getNumNodes(), 'nodos'))
+
+        names = graphModel.graph.getNodeAttrNames()
+        secId = self.graphTree.insert(nodesId, 'end',
+            text='Atributos',
+            values=(len(names), 'attrs'))
+        for name in sorted(names):
             attrId = self.graphTree.insert(secId, 'end',
-                text=attr,
-                values=('', 'nodeAttr'))
-            spec = graphModel.graph.getNodeAttrSpec(attr)
+                text=name,
+                values=('', 'attr'))
+            spec = graphModel.graph.getNodeAttrSpec(name)
             if spec is not None:
-                self.graphTree.item(attrId, values=(spec.type, 'nodeAttr'))
+                self.graphTree.item(attrId, values=(spec.type, 'attrType'))
                 if spec.default is not None:
                     self.graphTree.insert(attrId, 'end',
                         text='Default:',
                         values=(spec.default, 'attrDefault'))
 
-        attrNames = graphModel.graph.getEdgeAttrNames()
-        secId = self.graphTree.insert(iid, 'end',
-            text='Atributos de aresta',
-            values=(len(attrNames), 'attrs'))
-        for attr in sorted(attrNames):
+        names = graphModel.graph.getAggregatorNames(
+                gr.MultiGraph.SCOPE_NODE)
+        secId = self.graphTree.insert(nodesId, 'end',
+            text='Agregadores',
+            values=(len(names), 'aggregators'))
+        for name in sorted(names):
             attrId = self.graphTree.insert(secId, 'end',
-                text=attr,
-                values=('', 'edgeAttr'))
-            spec = graphModel.graph.getEdgeAttrSpec(attr)
+                text=name,
+                values=('', 'aggregator'))
+
+        edgesId = self.graphTree.insert(iid, 'end',
+            text='Arestas',
+            values=(graphModel.graph.getNumEdges(), 'edges'))
+
+        names = graphModel.graph.getEdgeAttrNames()
+        secId = self.graphTree.insert(edgesId, 'end',
+            text='Atributos',
+            values=(len(names), 'attrs'))
+        for name in sorted(names):
+            attrId = self.graphTree.insert(secId, 'end',
+                text=name,
+                values=('', 'attr'))
+            spec = graphModel.graph.getEdgeAttrSpec(name)
             if spec is not None:
-                self.graphTree.item(attrId, values=(spec.type, 'nodeAttr'))
+                self.graphTree.item(attrId, values=(spec.type, 'attrType'))
                 if spec.default is not None:
                     self.graphTree.insert(attrId, 'end',
                         text='Default:',
                         values=(spec.default, 'attrDefault'))
+
+        names = graphModel.graph.getAggregatorNames(
+                gr.MultiGraph.SCOPE_EDGE)
+        secId = self.graphTree.insert(edgesId, 'end',
+            text='Agregadores',
+            values=(len(names), 'aggregators'))
+        for name in sorted(names):
+            attrId = self.graphTree.insert(secId, 'end',
+                text=name,
+                values=('', 'aggregator'))
+
 
     def getSelectedGraphIid(self):
         sel = self.graphTree.selection()
@@ -734,11 +838,14 @@ class GraphAppGUI(tk.Frame):
         #m.add_command(label='#Remover atributo...',
         #    command=self.menuCmdNotImplemented)
         m.add_separator()
-        m.add_command(label='#Morfismo cheio...',
-            command=self.menuCmdNotImplemented)
+        m.add_command(label='Homomorfismo cheio...',
+            command=self.menuCmdFullHomomorphism)
 
         m = tk.Menu(self.menuBar)
         self.menuBar.add_cascade(label='Nodos', menu=m)
+        #m.add_command(label='#Remover nodos...',
+        #    command=self.menuCmdNotImplemented)
+        #m.add_separator()
         m.add_command(label='Importar atributos de csv...',
             command=self.menuCmdImportNodeAttr)
         m.add_command(label='Exportar atributos para csv...',
@@ -746,7 +853,11 @@ class GraphAppGUI(tk.Frame):
         #m.add_command(label='#Remover atributos...',
         #    command=self.menuCmdNotImplemented)
         #m.add_separator()
-        #m.add_command(label='#Remover nodos...',
+        #m.add_command(label='#Criar agregador...',
+        #    command=self.menuCmdNotImplemented)
+        #m.add_command(label='#Agregadores a partir de atributos...',
+        #    command=self.menuCmdNotImplemented)
+        #m.add_command(label='#Atributos a partir de agregador...',
         #    command=self.menuCmdNotImplemented)
         m.add_separator()
         m.add_command(label='Classificar por equivalência regular...',
@@ -754,6 +865,9 @@ class GraphAppGUI(tk.Frame):
 
         m = tk.Menu(self.menuBar)
         self.menuBar.add_cascade(label='Arestas', menu=m)
+        #m.add_command(label='#Remover arestas...',
+        #    command=self.menuCmdNotImplemented)
+        #m.add_separator()
         m.add_command(label='Importar atributos de csv...',
             command=self.menuCmdImportEdgeAttr)
         m.add_command(label='Exportar atributos para csv...',
@@ -761,7 +875,11 @@ class GraphAppGUI(tk.Frame):
         #m.add_command(label='#Remover atributos...',
         #    command=self.menuCmdNotImplemented)
         #m.add_separator()
-        #m.add_command(label='#Remover arestas...',
+        #m.add_command(label='#Criar agregador...',
+        #    command=self.menuCmdNotImplemented)
+        #m.add_command(label='#Agregadores a partir de atributos...',
+        #    command=self.menuCmdNotImplemented)
+        #m.add_command(label='#Atributos a partir de agregador...',
         #    command=self.menuCmdNotImplemented)
 
     def menuCmdNotImplemented(self):
@@ -794,7 +912,7 @@ class GraphAppGUI(tk.Frame):
     def menuCmdExportNodeAttr(self):
         self._cmdExportAttr('node')
 
-    def menuCmdQuit(self):
+    def menuCmdQuit(self, event=None):
         self.quit()
 
     def menuCmdNewGraph(self):
@@ -859,6 +977,13 @@ class GraphAppGUI(tk.Frame):
         if gsel is not None:
             gsel = gsel.name
         d = ClassifyRegularEquivDialog(self, self.control, gsel)
+        self.consumeQueue()
+
+    def menuCmdFullHomomorphism(self):
+        gsel = self.getSelectedGraph()
+        if gsel is not None:
+            gsel = gsel.name
+        d = FullHomomorphismDialog(self, self.control, gsel)
         self.consumeQueue()
 
 class AttributeConfigFrame(ttk.Frame):
@@ -1496,7 +1621,7 @@ class ClassifyRegularEquivDialog(Dialog):
                  'A escolha pode ser buscar o tipo pela relação das arestas ' +
                  'no grafo, ou considerar o valor de um atributo de aresta ' +
                  'como o tipo da aresta.',
-            items=items, selected=self.preClassAttrTxt.get())
+            items=items, selected=self.edgeClassAttrTxt.get())
 
         if dialog.result is not None:
             for i, v in dialog.result:
@@ -1546,6 +1671,188 @@ class ClassifyRegularEquivDialog(Dialog):
                 classAttr=self.classAttr.get().strip(),
                 preClassAttr=self.preClassAttr,
                 edgeClassAttr=self.edgeClassAttr)
+
+        gui.ExecutionDialog(master=self.master, command=execute,
+                logger=self.control.logger)
+
+class FullHomomorphismDialog(Dialog):
+    def __init__(self, master, control, selectedGraph=''):
+
+        self.master = master
+        self.control = control
+
+        self.graphName = tk.StringVar()
+        self.newGraphName = tk.StringVar()
+        self.newGraphName.set(self.control.generateNumericName())
+        self.nodeClassAttrTxt = tk.StringVar()
+        self.nodeClassAttr = None
+        self.edgeClassAttrTxt = tk.StringVar()
+        self.edgeClassAttr = None
+        self.regIdxPref = tk.StringVar()
+        self.nodeAttrs = []
+        self.edgeAttrs = []
+
+        if selectedGraph:
+            self._setGraphName(selectedGraph)
+
+        super().__init__(master, 'Homomorfismo cheio')
+
+    def _setGraphName(self, graphName):
+        self.graphName.set(graphName)
+
+        gmod = self.control.getGraphModel(graphName)
+        if gmod:
+            self.nodeAttrs = sorted(gmod.graph.getNodeAttrNames())
+            self.edgeAttrs = sorted(gmod.graph.getEdgeAttrNames())
+        else:
+            self.edgeAttrs = []
+            self.nodeAttrs = []
+
+        self.nodeClassAttr = None
+        self.edgeClassAttr = None
+        self.nodeClassAttrTxt.set('')
+        self.edgeClassAttrTxt.set('')
+
+    def body(self, master):
+        master.columnconfigure(1, weight=1)
+        labelwidth = 25
+        row = 0
+
+        lb = ttk.Label(master, text='Grafo:', justify=tk.RIGHT, anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.graphName, state='readonly')
+        btn = ttk.Button(master, text='Escolher...',
+                command=self._doBtnChooseGraph)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry, btn)
+
+        lb = ttk.Label(master, text='Novo grafo:',
+                justify=tk.RIGHT, anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.newGraphName)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry)
+
+        lb = ttk.Label(master, text='Classificação de nodo:',
+                justify=tk.RIGHT, anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.nodeClassAttrTxt,
+                state='readonly')
+        btn = ttk.Button(master, text='Escolher...',
+                command=self._doBtnChooseNodeClass)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry, btn)
+
+        self.nodeClassButton = btn
+
+        lb = ttk.Label(master, text='Classificação de aresta:', justify=tk.RIGHT,
+                anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.edgeClassAttrTxt,
+                state='readonly')
+        btn = ttk.Button(master, text='Escolher...',
+                command=self._doBtnChooseEdgeClass)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry, btn)
+
+        self.edgeClassButton = btn
+
+        lb = ttk.Label(master, text='Prefixo para índice de regularidade:',
+                justify=tk.RIGHT, anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.regIdxPref)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry)
+
+        self._updateButtonStates()
+
+        master.pack(fill='both', expand=True)
+
+    def _doBtnChooseGraph(self):
+        graphs = self.control.getGraphNames()
+        dialog = gui.ListSelectionDialog(self, title='Escolha de grafo',
+            text='Escolha o grafo de origem.',
+            items=graphs, selected=self.graphName.get())
+
+        if dialog.result:
+            for i, sel in dialog.result:
+                self._setGraphName(sel)
+                self._updateButtonStates()
+                break
+
+    def _doBtnChooseNodeClass(self):
+        items = ['<ID do nodo>'] + self.nodeAttrs
+        idxShift = 1
+
+        dialog = gui.ListSelectionDialog(self,
+            title='Seleção de classificação de nodos',
+            text='Selecione a classificação de nodos. O grafo resultante ' +
+                 'terá um nodo para cada classe.\n\n' +
+                 'Escolhendo <ID do nodo>, o grafo resultante terá os mesmos ' +
+                 'nodos do grafo original.',
+            items=items, selected=self.nodeClassAttrTxt.get())
+
+        if dialog.result is not None:
+            for i, v in dialog.result:
+                if i - idxShift < 0:
+                    self.nodeClassAttr = None
+                else:
+                    self.nodeClassAttr = v
+
+                self.nodeClassAttrTxt.set(v)
+
+    def _doBtnChooseEdgeClass(self):
+        items = ['<relação da aresta>'] + self.edgeAttrs
+        idxShift = 1
+
+        dialog = gui.ListSelectionDialog(self,
+            title='Seleção de classe de arestas',
+            text='Selecione a classificação da aresta. Esta definirá as ' +
+                 'relações, ou seja, os tipos ' +
+                 'das arestas do grafo resultante.\n\n' +
+                 'A escolha pode ser buscar o tipo pela relação das arestas ' +
+                 'no grafo, ou considerar o valor de um atributo de aresta ' +
+                 'como o tipo da aresta.',
+            items=items, selected=self.edgeClassAttrTxt.get())
+
+        if dialog.result is not None:
+            for i, v in dialog.result:
+                if i - idxShift < 0:
+                    self.edgeClassAttr = None
+                else:
+                    self.edgeClassAttr = v
+
+                self.edgeClassAttrTxt.set(v)
+
+    def _updateButtonStates(self):
+        btnState = tk.DISABLED
+        if self.graphName.get().strip():
+            btnState = tk.NORMAL
+
+        self.nodeClassButton['state'] = btnState
+        self.edgeClassButton['state'] = btnState
+
+    def validate(self):
+        isOk = True
+        errMsg = ''
+
+        if not self.graphName.get():
+            errMsg = 'O grafo não foi escolhido!'
+            isOk = False
+
+        name = self.newGraphName.get().strip()
+
+        if isOk and not name:
+            isOk = False
+            errMsg = 'O nome do grafo a ser criado não foi configurado!'
+
+        if not isOk:
+            tk.messagebox.showwarning('Problema na configuração',
+                errMsg)
+
+        return isOk
+
+    def apply(self):
+        origName = self.graphName.get().strip()
+        destName = self.newGraphName.get().strip()
+        regIdxPrefix = self.regIdxPref.get().strip()
+
+        def execute():
+            self.control.fullHomomorphism(graphName=origName,
+                newGraphName=destName,
+                nodeClassAttr=self.nodeClassAttr,
+                edgeClassAttr=self.edgeClassAttr,
+                regIdxPrefix=regIdxPrefix)
 
         gui.ExecutionDialog(master=self.master, command=execute,
                 logger=self.control.logger)

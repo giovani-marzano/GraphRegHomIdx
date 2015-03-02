@@ -508,6 +508,21 @@ class MultiGraph(object):
         de equivalência são definidas pelos valores dos atributos de nodos e de
         arestas fornecidos.
 
+        O grafo gerado possui os seguintes atributos:
+
+            Nodos:
+                - O mesmo de 'nodeClassAttr' se este não for None
+                - node_count: Contagem dos nodos originais mapeados em cada nodo
+                      destino
+            Arestas:
+                - O valor de 'edgeClassAttr', se tiver sido configurado, ou
+                  'relation', caso contrário
+                - edge_count: Contagem de arestas mapeadas nesta aresta.
+                - edge_srcCount: Numero de nodos originais distintos que são
+                      origens das arestas mapeadas nesta aresta.
+                - edge_tgtCount: Numero de nodos originais distintos que são
+                      destinos das arestas mapeadas nesta aresta.
+
         :param nodeClassAttr: Atributo de nodos que indica para cada nodo sua
             classe. Se for None será assumido que cada nodo é sua própria
             classe.
@@ -540,8 +555,10 @@ class MultiGraph(object):
 
         if edgeClassAttr is not None:
             edgeClass = edgeClassByAttr
+            relationAttr = edgeClassAttr
         else:
             edgeClass = edgeClassByRelation
+            relationAttr = 'relation'
 
         newGraph = MultiGraph()
 
@@ -589,9 +606,9 @@ class MultiGraph(object):
             edgeHits[newEdge] = hits
 
             s = edgeSrcSets.setdefault(newEdge, set())
-            s.add(newEdge[0])
+            s.add(src)
             s = edgeTgtSets.setdefault(newEdge, set())
-            s.add(newEdge[1])
+            s.add(tgt)
 
         edgeSrcHits = {e: len(s) for e, s in edgeSrcSets.items()}
         edgeTgtHits = {e: len(s) for e, s in edgeTgtSets.items()}
@@ -602,27 +619,23 @@ class MultiGraph(object):
                 newGraph.addNodeAttrSpec(spec)
             for node in newGraph.nodes():
                 newGraph.setNodeAttr(node, nodeClassAttr, node)
-        else:
-            # Para acrescentar atributos para as estatísticas coletadas
-            nodeClassAttr = 'node'
 
-        if edgeClassAttr is not None:
-            spec = self.getEdgeAttrSpec(edgeClassAttr)
-            if spec is not None:
-                newGraph.addEdgeAttrSpec(spec)
-            for edge in newGraph.edges():
-                newGraph.setEdgeAttr(edge, edgeClassAttr, edge[2])
-        else:
-            # Para acrescentar atributos para as estatísticas coletadas
-            edgeClassAttr = 'edge'
+        # TODO: poderíamos gerar nomes que garantissem que não entrarão em
+        # conflito com algum nome de atrinuto fornecido.
 
-        newGraph.setNodeAttrFromDict(nodeClassAttr+'_count', nodeHits,
+        spec = AttrSpec(relationAttr, 'string')
+        if spec is not None:
+            newGraph.addEdgeAttrSpec(spec)
+        for edge in newGraph.edges():
+            newGraph.setEdgeAttr(edge, relationAttr, str(edge[2]))
+
+        newGraph.setNodeAttrFromDict('node_count', nodeHits,
                 default=0, attrType=int)
-        newGraph.setEdgeAttrFromDict(edgeClassAttr+'_srcCount', edgeSrcHits,
+        newGraph.setEdgeAttrFromDict('edge_srcCount', edgeSrcHits,
                 default=0, attrType=int)
-        newGraph.setEdgeAttrFromDict(edgeClassAttr+'_tgtCount', edgeTgtHits,
+        newGraph.setEdgeAttrFromDict('edge_tgtCount', edgeTgtHits,
                 default=0, attrType=int)
-        newGraph.setEdgeAttrFromDict(edgeClassAttr+'_count', edgeHits,
+        newGraph.setEdgeAttrFromDict('edge_count', edgeHits,
                 default=0, attrType=int)
 
         return newGraph
