@@ -267,7 +267,8 @@ class ConfigGUI(tk.Frame):
         self.arqIn = tk.StringVar()
         self.arqIn.set(self.control.fileNameData)
 
-        label = tk.Label(self, text="Arquivo de entrada:")
+        label = tk.Label(self, text="Arquivo de entrada:", justify=tk.RIGHT,
+                anchor=tk.E)
         entry = tk.Entry(self, textvariable=self.arqIn, state='readonly')
         button = tk.Button(self, text='Abrir', command=self.do_btArqIn)
 
@@ -277,7 +278,8 @@ class ConfigGUI(tk.Frame):
         self.idAttrList = tk.StringVar()
         self.idAttrList.set(str(self.control.idAttrs))
 
-        label = tk.Label(self, text="Atributos de Identificação:")
+        label = tk.Label(self, text="Atributos de Identificação:",
+                justify=tk.RIGHT, anchor=tk.E)
         entry = tk.Entry(self, textvariable=self.idAttrList, state='readonly')
         button = tk.Button(self, text='Selecionar', command=self.do_btIds)
 
@@ -287,7 +289,8 @@ class ConfigGUI(tk.Frame):
         self.valAttrList = tk.StringVar()
         self.valAttrList.set(str(self.control.valueAttrs))
 
-        label = tk.Label(self, text="Atributos de valor:")
+        label = tk.Label(self, text="Atributos de valor:", justify=tk.RIGHT,
+                anchor=tk.E)
         entry = tk.Entry(self, textvariable=self.valAttrList, state='readonly')
         button = tk.Button(self, text='Selecionar', command=self.do_btValues)
 
@@ -303,7 +306,8 @@ class ConfigGUI(tk.Frame):
         self.arqOutSOM = tk.StringVar()
         self.arqOutSOM.set(self.control.fileNameSOM)
 
-        label = tk.Label(self, text="Arquivo de saída para o SOM:")
+        label = tk.Label(self, text="Arquivo de saída para o SOM:",
+                justify=tk.RIGHT, anchor=tk.E)
         entry = tk.Entry(self, textvariable=self.arqOutSOM, state='readonly')
         button = tk.Button(self, text='Selecionar', command=self.do_btArqOutSOM)
 
@@ -313,7 +317,8 @@ class ConfigGUI(tk.Frame):
         self.arqOutClusAssoc = tk.StringVar()
         self.arqOutClusAssoc.set(self.control.fileNameClusAssoc)
 
-        label = tk.Label(self, text="Arquivo de saída para o SOM:")
+        label = tk.Label(self, text="Arquivo de saída para a " +
+                "classificação dos elementos:", justify=tk.RIGHT, anchor=tk.E)
         entry = tk.Entry(self, textvariable=self.arqOutClusAssoc, state='readonly')
         button = tk.Button(self, text='Selecionar',
             command=self.do_btArqOutClussAssoc)
