@@ -532,57 +532,106 @@ class GraphAppControl(object):
 
         # Calculando os índices de regularidade
         if regIdxPrefix:
-            dTotal = 0
-            nTotal = 0
-
-            nodeTotals = {}
-
-            attrs = {
-                'edge': regIdxPrefix,
-                'edgeTgt': regIdxPrefix+'_tgt',
-                'edgeSrc': regIdxPrefix+'_src'
-            }
-            for _, name in attrs.items():
-                spec = gr.AttrSpec(name, float, 0)
-                newG.addEdgeAttrSpec(spec)
-            for edge in newG.edges():
-                src, tgt, rel = edge
-                ds = newG.getNodeAttr(src, 'node_count')
-                dt = newG.getNodeAttr(tgt, 'node_count')
-                ns = newG.getEdgeAttr(edge, 'edge_srcCount')
-                nt = newG.getEdgeAttr(edge, 'edge_tgtCount')
-                newG.setEdgeAttr(edge, attrs['edge'], (ns+nt)/(ds+dt))
-                newG.setEdgeAttr(edge, attrs['edgeTgt'], (nt)/(dt))
-                newG.setEdgeAttr(edge, attrs['edgeSrc'], (ns)/(ds))
-
-                dTotal += ds + dt
-                nTotal += ns + nt
-
-                n, d = nodeTotals.get(src,(0,0))
-                nodeTotals[src] = (n+ns, d+ds)
-                n, d = nodeTotals.get(tgt,(0,0))
-                nodeTotals[tgt] = (n+nt, d+dt)
-
-            spec = gr.AttrSpec(regIdxPrefix, float, 0)
-            newG.addGraphAttrSpec(spec)
-            newG.setGraphAttr(regIdxPrefix, nTotal/dTotal)
-
-            spec = gr.AttrSpec(regIdxPrefix, float, 0)
-            newG.addNodeAttrSpec(spec)
-            for node in newG.nodes():
-                (n, d) = nodeTotals.get(node,(0,0))
-
-                if d > 0:
-                    newG.setNodeAttr(node, regIdxPrefix, n/d)
-                else:
-                    # O nodo pode não ter arestas
-                    d = newG.getNodeAttr(node, 'node_count')
-                    if d > 0:
-                        newG.setNodeAttr(node, regIdxPrefix, 1.0)
-                    else:
-                        newG.setNodeAttr(node, regIdxPrefix, 0.0)
+            evaluateRegularIndex(newG, regIdxPrefix, self.logger)
 
         self.insertGraph(newG, newGraphName)
+
+def evaluateRegularIndex(newG, regIdxPrefix, logger):
+
+    def calcRegIdx1(n0, d0, ns, ds, nt, dt, ec, scope):
+        if scope == 'src':
+            return n0 + ns, d0 + ds
+        elif scope == 'tgt':
+            return n0 + nt, d0 + dt
+        elif scope == 'graph':
+            return n0 + ns + nt, d0 + ds + dt
+        else:
+            raise ValueError('Invalid scope "{0}"'.format(scope))
+
+    def calcRegIdx2(n0, d0, ns, ds, nt, dt, ec, scope):
+        if scope == 'src':
+            return n0 + ec*ns, d0 + ec*ds
+        elif scope == 'tgt':
+            return n0 + ec*nt, d0 + ec*dt
+        elif scope == 'graph':
+            return n0 + ec*(ns + nt), d0 + ec*(ds + dt)
+        else:
+            raise ValueError('Invalid scope "{0}"'.format(scope))
+
+    def calcRegIdx3(n0, d0, ns, ds, nt, dt, ec, scope):
+            return n0 + ec*(ns + nt), d0 + ec*(ds + dt)
+
+    calcRegVet = [calcRegIdx1, calcRegIdx2, calcRegIdx3]
+
+    graphTotals = [(0,0) for f in calcRegVet]
+
+    nodeTotals = {}
+
+    attrs = {
+        'edge': regIdxPrefix,
+        'edgeTgt': regIdxPrefix+'_tgt',
+        'edgeSrc': regIdxPrefix+'_src'
+    }
+    for _, name in attrs.items():
+        spec = gr.AttrSpec(name, float, 0)
+        newG.addEdgeAttrSpec(spec)
+    for edge in newG.edges():
+        src, tgt, rel = edge
+        ds = newG.getNodeAttr(src, 'node_count')
+        dt = newG.getNodeAttr(tgt, 'node_count')
+        ns = newG.getEdgeAttr(edge, 'edge_srcCount')
+        nt = newG.getEdgeAttr(edge, 'edge_tgtCount')
+        ec = newG.getEdgeAttr(edge, 'edge_count')
+        newG.setEdgeAttr(edge, attrs['edge'], (ns+nt)/(ds+dt))
+        newG.setEdgeAttr(edge, attrs['edgeTgt'], (nt)/(dt))
+        newG.setEdgeAttr(edge, attrs['edgeSrc'], (ns)/(ds))
+
+        for i, calcf in enumerate(calcRegVet):
+            n0, d0 = graphTotals[i]
+            graphTotals[i] = calcf(n0, d0, ns, ds, nt, dt, ec, 'graph')
+
+        nodeNDs = nodeTotals.setdefault(src,[(0,0) for f in calcRegVet])
+        for i, calcf in enumerate(calcRegVet):
+            n0, d0 = nodeNDs[i]
+            nodeNDs[i] = calcf(n0, d0, ns, ds, nt, dt, ec, 'src')
+
+        nodeNDs = nodeTotals.setdefault(tgt,[(0,0) for f in calcRegVet])
+        for i, calcf in enumerate(calcRegVet):
+            n0, d0 = nodeNDs[i]
+            nodeNDs[i] = calcf(n0, d0, ns, ds, nt, dt, ec, 'tgt')
+
+    for i, ND in enumerate(graphTotals):
+        n, d = ND
+        attrName = regIdxPrefix+str(i)
+        spec = gr.AttrSpec(attrName, float, 0)
+        newG.addGraphAttrSpec(spec)
+        newG.setGraphAttr(attrName, n/d)
+
+    for i, calcf in enumerate(calcRegVet):
+        attrName = regIdxPrefix+str(i)
+        spec = gr.AttrSpec(attrName, float, 0)
+        newG.addNodeAttrSpec(spec)
+
+    for node in newG.nodes():
+        nodeNDs = nodeTotals.get(node,[(0,0) for f in calcRegVet])
+
+        for i, ND in enumerate(nodeNDs):
+            attrName = regIdxPrefix+str(i)
+            n, d = ND
+            if d > 0:
+                newG.setNodeAttr(node, attrName, n/d)
+            else:
+                # O nodo pode não ter arestas
+                count = newG.getNodeAttr(node, 'node_count')
+                if count > 0:
+                    newG.setNodeAttr(node, attrName, 1.0)
+                else:
+                    # Isto aqui não devia acontecer
+                    newG.setNodeAttr(node, attrName, 0.0)
+                    logger.error(
+                        ('Nodo {0} sem nodos ?!! '+
+                        'count {1}, n {2}, d {3}').format(
+                            node, count, n, d))
 
 #---------------------------------------------------------------------
 # Classes GUI
@@ -1689,6 +1738,7 @@ class FullHomomorphismDialog(Dialog):
         self.edgeClassAttrTxt = tk.StringVar()
         self.edgeClassAttr = None
         self.regIdxPref = tk.StringVar()
+        self.regIdxPref.set('regIdx')
         self.nodeAttrs = []
         self.edgeAttrs = []
 
