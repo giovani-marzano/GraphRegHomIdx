@@ -476,7 +476,8 @@ class GraphAppControl(object):
         # end with
 
     def classifyByRegularEquivalence(self, graphName, classAttr,
-            preClassAttr=None, edgeClassAttr=None):
+            preClassAttr=None, edgeClassAttr=None, maxIterations=0,
+            classForEveryIteration=False):
 
         if graphName not in self.graphModels.keys():
             raise KeyError(
@@ -498,24 +499,36 @@ class GraphAppControl(object):
             if edgeClassAttr not in gmod.graph.getEdgeAttrNames():
                 raise KeyError("Atributo de aresta '{0}' não existe".format(edgeClassAttr))
 
+        classesGraph = gr.MultiGraph()
+
         classesVet = []
-        def procIteration(i, classes, done):
+        def procIteration(i, classes, done, newClassesParents):
             self.logger.info(
                 'Regular equivalence iteration {0} - done {1}'.format(i, done))
 
-            # Não pegamos a última pois é igual à penúltima uma: o algoritmo
-            # para (done = True) quando percebe que não houve alteração entre a
-            # classificação atual e a anterior.
-            if not done:
-                classesVet.append(classes)
+            for cNow, cAnt in newClassesParents.items():
+                classesGraph.addEdge(str(cAnt),str(cNow),'child')
 
-            return True
+            keepGoing = maxIterations <= 0 or i < maxIterations
+
+            if classForEveryIteration:
+                # Não pegamos a última pois é igual à penúltima uma: o algoritmo
+                # para (done = True) quando percebe que não houve alteração entre a
+                # classificação atual e a anterior.
+                if not done:
+                    classesVet.append((i, classes))
+            elif done or not keepGoing:
+                classesVet.append((i, classes))
+
+            return keepGoing
 
         gr.regularEquivalence(gmod.graph, preClassAttr=preClassAttr,
             edgeClassAttr=edgeClassAttr, ctrlFunc=procIteration)
 
-        for i, classes in enumerate(classesVet):
-            spec = gr.AttrSpec('{0}_{1}'.format(classAttr, i+1),'int')
+        classesGraph.writeGraphml(gmod.name+'_regClassesParents')
+
+        for i, classes in classesVet:
+            spec = gr.AttrSpec('{0}_{1}'.format(classAttr, i),'int')
             gmod.graph.addNodeAttrSpec(spec)
             gmod.graph.setNodeAttrFromDict(spec.name, classes)
 
@@ -1580,6 +1593,10 @@ class ClassifyRegularEquivDialog(Dialog):
         self.edgeClassAttr = None
         self.nodeAttrs = []
         self.edgeAttrs = []
+        self.maxIterations = tk.IntVar()
+        self.maxIterations.set(0)
+        self.classForEveryIteration = tk.BooleanVar()
+        self.classForEveryIteration.set(True)
 
         if selectedGraph:
             self._setGraphName(selectedGraph)
@@ -1637,6 +1654,21 @@ class ClassifyRegularEquivDialog(Dialog):
         row = gridLabelAndWidgets(row, labelwidth, lb, entry, btn)
 
         self.edgeClassButton = btn
+
+        lb = ttk.Label(master,
+            text='Número máximo de iterações\n(zero para sem limite):',
+            justify=tk.RIGHT, anchor=tk.E)
+        spin = tk.Spinbox(master, textvariable=self.maxIterations,
+                from_=0, to=100, increment=1)
+        row = gridLabelAndWidgets(row, labelwidth, lb, spin)
+
+        lb = ttk.Label(master,
+            text=':Gerar classificações para cada iteração',
+            justify=tk.LEFT, anchor=tk.W)
+        cb = ttk.Checkbutton(master, variable=self.classForEveryIteration)
+        cb.grid(row=row, column=0, sticky=tk.E)
+        lb.grid(row=row, column=1, columnspan=2, sticky=tk.W)
+        row += 1
 
         self._updateButtonStates()
 
@@ -1733,11 +1765,19 @@ class ClassifyRegularEquivDialog(Dialog):
         return isOk
 
     def apply(self):
+        classAttr = self.classAttr.get().strip()
+        graphName = self.graphName.get()
+        maxIterations = self.maxIterations.get()
+        classForEveryIteration = self.classForEveryIteration.get()
+
         def execute():
-            self.control.classifyByRegularEquivalence(graphName=self.graphName.get(),
-                classAttr=self.classAttr.get().strip(),
+            self.control.classifyByRegularEquivalence(
+                graphName=graphName,
+                classAttr=classAttr,
                 preClassAttr=self.preClassAttr,
-                edgeClassAttr=self.edgeClassAttr)
+                edgeClassAttr=self.edgeClassAttr,
+                maxIterations=maxIterations,
+                classForEveryIteration=classForEveryIteration)
 
         gui.ExecutionDialog(master=self.master, command=execute,
                 logger=self.control.logger)

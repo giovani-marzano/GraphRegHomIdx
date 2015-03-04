@@ -324,7 +324,7 @@ class CtrlRegEquiv(object):
         self.classesVet = []
         self.iterations = 0
 
-    def procIteration(self, i, classes, done):
+    def procIteration(self, i, classes, done, classesParents):
         if i == 1:
             self.log.info('RegEquiv {0}:'.format(self.tipo))
         self.log.info('    iteration: {0}'.format(i))

@@ -34,6 +34,9 @@ def regularEquivalence(graph, preClassAttr=None, edgeClassAttr=None,
                     - itCount: Número da iteração atual começãndo em 1
                     - classesNow: Classificação dos nodos até o momento
                     - done: True se já se atingiu a classificação final
+                    - newClassesParents: Mapa que associa a cada classe criada
+                      nesta iteração à classe da iteração anterior a qual
+                      pertencia.
 
                 Return:
                     True: para que o algoritmo continue com a próxima iteração
@@ -74,6 +77,10 @@ def regularEquivalence(graph, preClassAttr=None, edgeClassAttr=None,
     itCount = 1
 
     while keepGoing:
+        # Mantem para esta iteração a classe de origem de cada nova classe
+        # criada.
+        newClassesParents = {}
+
         changed = False
         for nodeNumber, n1 in nodes:
             if classesNow[n1] is not None:
@@ -82,6 +89,7 @@ def regularEquivalence(graph, preClassAttr=None, edgeClassAttr=None,
             classesNow[n1] = nodeNumber
             if classesNow[n1] != classesAnt[n1]:
                 changed = True
+                newClassesParents[classesNow[n1]] = classesAnt[n1]
 
             # Conjuntos das classes de equivalencia que possuem arestas
             # entrando e saindo de n1
@@ -108,8 +116,7 @@ def regularEquivalence(graph, preClassAttr=None, edgeClassAttr=None,
                     if classesNow[n2] != classesAnt[n2]:
                         changed = True
         # end for n1
-
-        keepGoing = ctrlFunc(itCount, classesNow, not changed)
+        keepGoing = ctrlFunc(itCount, classesNow, not changed, newClassesParents)
 
         keepGoing = keepGoing and changed
         itCount += 1
@@ -191,6 +198,7 @@ class MultiGraph(object):
     def addEdge(self, source, target, relation):
         if self.hasEdge(source, target, relation):
             # Aresta já existe
+            print('Já existe', source, target, relation)
             return
 
         if source not in self._adjOut:
