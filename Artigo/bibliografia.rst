@@ -33,6 +33,10 @@
     SCHAEFFER, Satu Elisa. Graph clustering. **Computer science review**,
     [S.l.]: Elsevier, v. 1, p. 27-64, august 2007.
 
+    SPIVAK, David I. **Category theory for scientists**, 2013. (Massachusetts
+    Institute of Technology: MIT OpenCourseWare, http://ocw.mit.edu). Disponível
+    em: http://math.mit.edu/~dspivak/CT4S.pdf. Acesso em: 05 mar 2015.
+
     WEEKS, Margaret R. et al. Social networks of drug users in high-risk sites:
     finding the connections. **AIDS and behavior**, [S.l.]: Plenum, v. 6, n. 2,
     p. 193-206. june 2002.
