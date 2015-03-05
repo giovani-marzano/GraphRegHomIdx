@@ -7,7 +7,7 @@
     BIEMANN, Chris. Chinese whispers: an efficient graph clustering algorithm
     and its application to natural language processing problems. In: FIRST
     WORKSHOP ON GRAPH BASED METHODS FOR NATURAL LANGUAGE PROCESSING, 1, 2006,
-    New York City.  **Proceedings of the...** Stroudsburg: Association for
+    New York City.  **Proceedings of the...**, Stroudsburg: Association for
     Computational Linguistics, 2006. p. 73-80.
 
     CORMEN, Thomas H. et al. Algoritmos elementares de grafos. In: CORMEN,

@@ -5,14 +5,16 @@ Trabalho de conclusão de curso
 
 **Orientador**: Pasteur Ottoni de Miranda Jr.
 
-Introdução
-==========
+Referencial teórico
+===================
 
-Desenvolvimento
-===============
+Apresentamos nesta seção os conceitos utilizados neste trabalho, bem como o
+embasamento bibliográfico para os mesmos.
 
-Conclusão
-=========
+Grafos
+------
+
+Um grafo direcionado é definido por Menezes
 
 Referências bibliográficas
 ==========================
