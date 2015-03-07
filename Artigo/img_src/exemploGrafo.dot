@@ -1,0 +1,9 @@
+digraph exemplo {
+    rankdir=LR;
+    node [shape=circle];
+    1 -> 2 [label="a"];
+    1 -> 2 [label="b"];
+    2 -> 3 [label="c"];
+    3 -> 3 [label="d"];
+    4;
+}
