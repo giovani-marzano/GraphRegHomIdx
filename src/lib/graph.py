@@ -198,7 +198,6 @@ class MultiGraph(object):
     def addEdge(self, source, target, relation):
         if self.hasEdge(source, target, relation):
             # Aresta já existe
-            print('Já existe', source, target, relation)
             return
 
         if source not in self._adjOut:
