@@ -21,11 +21,6 @@
     MENEZES, Paulo B.; HAEUSLER, Edward H. **Teoria das categorias para ciência
     da computação**. 2 ed. Porto Alegre: Bookmann, 2008. 330 p.
 
-    REITZ, Karl P.; WHITE, Douglas R. Rethinking the role concept: homomorphisms
-    on social networks. In: FREEMAN, Linton C.; WHITE, Douglas R.; ROMNEY, A.
-    K.(Ed.) **Research methods in social network analysis**. 1 ed. New
-    Brunswick: Transaction, 1992. Cap. 13, p. 419-478.
-
     ROUSSEEUW, Peter J. Silhouettes: a graphical aid to the interpretation and
     validation of cluster analysis. **Journal of computational an applied
     mathematics**, North-Holland: Elsevier Science, v. 20, p. 53-65, 1987.
@@ -44,3 +39,9 @@
     WHITE, Douglas R.; REITZ, Karl P. Graph and semigroup homomorphisms on
     networks of relations. **Social Networks**, North-Holland: Elsevier Science,
     v. 5, p. 193-234. 1983.
+
+    WHITE, Douglas R.; REITZ, Karl P. Rethinking the role concept: homomorphisms
+    on social networks. In: FREEMAN, Linton C.; WHITE, Douglas R.; ROMNEY, A.
+    K.(Ed.) **Research methods in social network analysis**. 1 ed. New
+    Brunswick: Transaction, 1992. Cap. 13, p. 419-478.
+
