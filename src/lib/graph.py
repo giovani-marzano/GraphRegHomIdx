@@ -408,6 +408,12 @@ class MultiGraph(object):
         else:
             raise ValueError('Invalid scope {0}'.format(scope))
 
+    def hasAggregator(self, scope, name):
+        """Verifica se existe agregator no escopo especificado com o nome
+        fornecido.
+        """
+        return name in self.aggregators[scope]
+
     def addAggregator(self, scope, name, initValue=None):
         """Adiciona um novo agregador zerado ao grafo.
 
@@ -416,10 +422,17 @@ class MultiGraph(object):
             - name: Nome para o agregador
             - initValue: Valor de inicialização
         """
+        if self.hasAggregator(scope, name):
+            raise KeyError('Já existe agregador de nome {0}'.format(name))
+
         aggrMap = {}
 
         self.aggregators[scope][name] = aggrMap
 
+        if initValue is not None:
+            for elem in self.elements(scope):
+                aggr = self.getElemAggregator(scope, elem, name)
+                aggr += initValue
 
     def removeAggregator(self, scope, name):
         if scope not in self.aggregators:
@@ -439,10 +452,11 @@ class MultiGraph(object):
             - name: Nome para o agregador
         """
 
-        aggrMap = self.addAggregator(scope, attrName)
+        self.addAggregator(scope, attrName)
         for elem in self.elements(scope):
             v = self.getElemAttr(scope, elem, attrName)
-            aggrMap[elem] += v
+            aggr = self.getElemAggregator(scope, elem, attrName)
+            aggr += v
 
     def getAggregator(self, scope, name):
         """Recupera o mapa de agregadores de nome 'name' para o escopo de
@@ -457,7 +471,7 @@ class MultiGraph(object):
         return self.aggregators[scope].get(name)
 
     def getElemAggregator(self, scope, elem, name):
-        aggrMap = self.getAggregator(name)
+        aggrMap = self.getAggregator(scope, name)
 
         if aggrMap is None:
             raise KeyError(

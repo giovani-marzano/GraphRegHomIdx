@@ -94,7 +94,7 @@ class NumericAggregator(object):
         d_min = float('inf')
         d_max = float('-inf')
 
-        if isinstance(other, Aggregate):
+        if isinstance(other, NumericAggregator):
             if other._count > 0:
                 d_count = other._count
                 d_sum = other._sum
@@ -125,7 +125,7 @@ class NumericAggregator(object):
         return self
 
     def __add__(self, other):
-        v = Aggregate()
+        v = NumericAggregator()
         v += self
         v += other
         return v
