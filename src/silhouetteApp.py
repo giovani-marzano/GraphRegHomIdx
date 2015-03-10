@@ -12,6 +12,7 @@ import io
 import logging
 import logging.config
 import csv
+import heapq
 
 import sys
 
@@ -27,7 +28,7 @@ import silhouette as silhou
 #---------------------------------------------------------------------
 
 # Configurações para controlar a geração de log pelo script
-ARQ_LOG = 'silhuette.log'
+ARQ_LOG = 'siluoette.log'
 LOG_CONFIG = {
     'version': 1,
     'formatters': {
@@ -58,13 +59,35 @@ LOG_CONFIG = {
     }
 }
 
+# Configurações de formato do csv de saída
+CSV_OUT_CONFIG = {
+    'delimiter': '\t',
+    'doublequote': True,
+    'escapechar': '\\',
+    'lineterminator': '\n',
+    'quotechar': '"',
+    'quoting': csv.QUOTE_NONNUMERIC,
+    'skipinitialspace': True
+}
+CSV_OUT_DIALECT='appcsvdialect'
+
+#---------------------------------------------------------------------
+# Funções auxiliares
+#---------------------------------------------------------------------
+def iterHeap(heap):
+    while True:
+        try:
+            yield heapq.heappop(heap)
+        except IndexError:
+            return
+
 #---------------------------------------------------------------------
 # Classe de controle do aplicativo
 #---------------------------------------------------------------------
 class AppControl(object):
     """Classe que controla o caso de uso do aplicativo.
 
-    Atributos: 
+    Atributos:
 
     - fileNameData: Nome do arquivo CSV com os dados a serem processados.
 
@@ -96,6 +119,13 @@ class AppControl(object):
         self.fileNameElemSilh = ''
         self.fileNameRelat = ''
         self.clearDataFile()
+        self.csvDialectOut = None
+
+    def getCsvDialectOut(self):
+        if self.csvDialectOut is None:
+            return self.csvDialect
+        else:
+            return self.csvDialectOut
 
     def clearDataFile(self):
         self.fileNameData = ''
@@ -110,6 +140,7 @@ class AppControl(object):
 
         f = open(fileName, newline='')
         self.csvDialect = csv.Sniffer().sniff(f.read(1024))
+        self.csvDialect.escapechar = '\\'
         f.seek(0)
         self.fileNameData = fileName
 
@@ -178,17 +209,31 @@ class AppControl(object):
         if self.fileNameElemSilh is None or self.fileNameElemSilh == '':
             return
 
+        # Colocando os items em uma heap ordenada por cluster e -1 * o valor de
+        # silhueta. Desta forma podemos retira da heap os elementos agrupados
+        # por cluster e em ordem decrescente de índice de silhueta
+        items = []
+
+        for e, cluster in elemClusters.items():
+            heapq.heappush(items, (cluster, -1 * elemSilh[e], e))
+
         self.logger.info('Salvando {0}...'.format(self.fileNameElemSilh))
         with open(self.fileNameElemSilh, 'w', newline='') as f:
-            csvWriter = csv.writer(f, self.csvDialect)
+            dialect = self.getCsvDialectOut()
+            csvWriter = csv.writer(f, dialect)
             csvWriter.writerow(['#'] + self.idAttrs +
                     ['silhouette', self.clusterAttr,
                         self.clusterAttr+'_vizinho'])
-            for ids in sorted(elemClusters.keys()):
+
+            for cluster, _, ids in iterHeap(items):
                 row = list(ids) + [
-                    elemSilh[ids], elemClusters[ids], neighboor[ids]
+                    elemSilh[ids], cluster, neighboor[ids]
                     ]
-                csvWriter.writerow(row)
+                try:
+                    csvWriter.writerow(row)
+                except Exception as ex:
+                    print(row)
+                    raise ex
 
         self.logger.info('...ok')
 
@@ -196,13 +241,13 @@ class AppControl(object):
         if self.fileNameRelat is not None and self.fileNameRelat != '':
             self.logger.info('Salvando {0}...'.format(self.fileNameRelat))
             with open(self.fileNameRelat, 'w') as f:
-                f.write('Total silhuette: {0}\n'.format(totalSilh))
-                f.write('Clusters silhuettes:\n')
+                f.write('Total silhouette: {0}\n'.format(totalSilh))
+                f.write('Clusters silhouettes:\n')
                 for clIds in sorted(clusSilh.keys()):
                     f.write('  {0}: {1}\n'.format(clIds, clusSilh[clIds]))
             self.logger.info('...ok')
 
-    def _calcSilhuettes(self, elements, elemClusters):
+    def _calcSilhouettes(self, elements, elemClusters):
         self.logger.info('Calculando silhuetas...')
         retTuple = silhou.evaluateClusters2(elements, elemClusters)
         self.logger.info('...ok')
@@ -213,12 +258,12 @@ class AppControl(object):
         """
         elements, elemClusters = self._carregaDados()
 
-        elemSilh, clusSilh, totalSilh, neighClust = self._calcSilhuettes(
+        elemSilh, clusSilh, totalSilh, neighClust = self._calcSilhouettes(
                 elements, elemClusters)
 
         self._writeClassificationCSV(elemClusters, elemSilh, neighClust)
 
-        self._writeClusterReport(totalSilh, clusSilh) 
+        self._writeClusterReport(totalSilh, clusSilh)
 
 
 #---------------------------------------------------------------------
@@ -233,13 +278,13 @@ import gui
 import textwrap
 
 class ConfigGUI(tk.Frame):
-    def __init__(self, master, logger, **options):
+    def __init__(self, master, control, logger, **options):
         super().__init__(master, **options)
 
         self.master = master
 
         self.logger = logger
-        self.control = AppControl(logger)
+        self.control = control
 
         row = 0
 
@@ -324,8 +369,8 @@ class ConfigGUI(tk.Frame):
         """
         label['text'] = textwrap.fill(label['text'], 20)
         label.grid(row=row, column=0, sticky=tk.EW)
-        entry.grid(row=row, column=1, sticky=tk.EW) 
-        button.grid(row=row, column=2, sticky=tk.EW) 
+        entry.grid(row=row, column=1, sticky=tk.EW)
+        button.grid(row=row, column=2, sticky=tk.EW)
         return row + 1
 
     def _gridButton(self, button, row):
@@ -333,7 +378,7 @@ class ConfigGUI(tk.Frame):
 
         Return the next available row in the grid.
         """
-        button.grid(row=row, column=1, sticky=tk.EW) 
+        button.grid(row=row, column=1, sticky=tk.EW)
         return row + 1
 
     def do_btValues(self):
@@ -374,6 +419,9 @@ class ConfigGUI(tk.Frame):
             self.arqIn.set(self.control.fileNameData)
             self.idAttrList.set(str(self.control.idAttrs))
             self.valAttrList.set(str(self.control.valueAttrs))
+            self.clusterAttr.set(self.control.clusterAttr)
+            self.arqOutElemSilh.set('')
+            self.arqOutClusSilh.set('')
 
     def do_btArqOutElemSilh(self):
         fileName = filedialog.asksaveasfilename(
@@ -405,7 +453,15 @@ class ConfigGUI(tk.Frame):
 if __name__ == '__main__':
     logging.config.dictConfig(LOG_CONFIG)
     logger = logging.getLogger()
+
+    control = AppControl(logger)
+
+    # Configurando csv dialect para escrita
+    if CSV_OUT_CONFIG is not None:
+        csv.register_dialect(CSV_OUT_DIALECT, **CSV_OUT_CONFIG)
+        control.csvDialectOut = CSV_OUT_DIALECT
+
     app = tk.Tk()
-    confGui = ConfigGUI(app, logger)
+    confGui = ConfigGUI(app, control, logger)
     confGui.pack(expand=True, fill='both')
     app.mainloop()
