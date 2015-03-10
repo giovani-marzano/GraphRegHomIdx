@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 """Script que processa um arquivo csv que contém as arestas como extraídas do
 facebook pelo NodeXL.
 
@@ -25,16 +27,29 @@ import sys
 
 RELACOES_NAO_DIRECIONADAS = ['Friend']
 
+#RELACOES_INCLUIDAS = [
+#    'Liker',
+#    'Post Author',
+#    'Commenter',
+#    'User Tagged'
+#]
+
 RELACOES_INCLUIDAS = [
     'Liker',
     'Post Author',
     'Commenter',
-    'User Tagged'
 ]
 
 CSV_OPTIONS = {
-    'delimiter': ';'
+    'delimiter': '\t'
 }
+
+# Flag que indica se é para retirar sufixos numéricos que aparecerem no final
+# dos nomes das pessoas.
+RETIRAR_SUFIXO_NUMERICO = True
+
+from collections import Counter
+import re
 
 if __name__ == '__main__':
 
@@ -42,6 +57,9 @@ if __name__ == '__main__':
         print('Usage: {0} arqIn arqOut'.format(sys.argv[0]))
         sys.exit()
 
+    namePattern = r'^ *(.*?)[0-9]* *$'
+    namePat = re.compile(namePattern)
+    nameCounter = Counter()
     pesos = {}
 
     def addEdge(src, tgt, rel):
@@ -50,13 +68,22 @@ if __name__ == '__main__':
         p += 1
         pesos[edge] = p
 
-    csvReader = csv.reader(open(sys.argv[1], 'r', newline=''), **CSV_OPTIONS)
+    with open(sys.argv[1], 'r', newline='') as f:
+        csvReader = csv.reader(f, **CSV_OPTIONS)
 
-    for campos in csvReader:
-        if campos[2] in RELACOES_INCLUIDAS:
-            addEdge(campos[0], campos[1], campos[2])
-            if campos[2] in RELACOES_NAO_DIRECIONADAS:
-                addEdge(campos[1], campos[0], campos[2])
+        for campos in csvReader:
+            if RETIRAR_SUFIXO_NUMERICO:
+                for i in range(2):
+                    m = namePat.match(campos[i])
+                    if m:
+                        campos[i] = m.group(1)
+                    else:
+                        print('No match ', campos[i])
+
+            if campos[2] in RELACOES_INCLUIDAS:
+                addEdge(campos[0], campos[1], campos[2])
+                if campos[2] in RELACOES_NAO_DIRECIONADAS:
+                    addEdge(campos[1], campos[0], campos[2])
                 
     with open(sys.argv[2], 'w', newline='') as f:
         csvWriter = csv.writer(f, **CSV_OPTIONS)
