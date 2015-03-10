@@ -558,6 +558,10 @@ class GraphAppControl(object):
             if edgeClassAttr not in gmod.graph.getEdgeAttrNames():
                 raise KeyError("Atributo de aresta '{0}' não existe".format(edgeClassAttr))
 
+        # TODO: Temporário - criando agregadores para todos os atributos
+        # numéricos
+        self._createAggrForAllNumericAttr(graphName)
+
         newG = gmod.graph.spawnFromClassAttributes(nodeClassAttr=nodeClassAttr,
                 edgeClassAttr=edgeClassAttr)
 
@@ -566,6 +570,42 @@ class GraphAppControl(object):
             evaluateRegularIndex(newG, regIdxPrefix, self.logger)
 
         self.insertGraph(newG, newGraphName)
+
+    def _createAggrForAllNumericAttr(self, graphName):
+        gmod = self.graphModels[graphName]
+
+        nodeAttrs = []
+        edgeAttrs = []
+
+        for name, spec in gmod.graph.nodeAttrSpecs.items():
+            if spec.type in spec.NUMERIC_TYPES:
+                if not gmod.graph.hasAggregator(gr.MultiGraph.SCOPE_NODE, name):
+                    nodeAttrs.append(name)
+
+        for name, spec in gmod.graph.edgeAttrSpecs.items():
+            if spec.type in spec.NUMERIC_TYPES:
+                if not gmod.graph.hasAggregator(gr.MultiGraph.SCOPE_EDGE, name):
+                    edgeAttrs.append(name)
+
+        self.createAggregatorsForAttrs(graphName, nodeAttrs, edgeAttrs)
+
+    def createAggregatorsForAttrs(self, graphName, nodeAttrs=[], edgeAttrs=[]):
+        gmod = self.graphModels[graphName]
+        changed = False
+
+        # TODO garantir ou verificar que o atributo é numérico
+        for attr in nodeAttrs:
+            gmod.graph.createAggregatorFromAttribute(gr.MultiGraph.SCOPE_NODE,
+                    attr)
+            changed = True
+
+        for attr in edgeAttrs:
+            gmod.graph.createAggregatorFromAttribute(gr.MultiGraph.SCOPE_NODE,
+                    attr)
+            changed = True
+
+        if changed:
+            self._callChangeHandlers(gmod)
 
 def evaluateRegularIndex(newG, regIdxPrefix, logger):
 
