@@ -218,7 +218,7 @@ class SOMAppControl(object):
             return
 
         with open(self.fileNameClusAssoc, 'w', newline='') as f:
-            csvWriter = csv.writer(f, self.csvDialect)
+            csvWriter = csv.writer(f, self.csvDialect, escapechar='\\')
             csvWriter.writerow(['#'] + self.idAttrs +
                     ['classe_som','erro_de_quantizacao','silhouette','cluster_vizinho'])
             for ids in sorted(classes.keys()):

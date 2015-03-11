@@ -155,6 +155,8 @@ class AbstractSOMap(object):
         self.elements = []
         self.FVU = 1.0
 
+        self._oldAssigns = None
+
         # Atributos para controle do MST
         self.doMST = False
         self._mstHnd = None
@@ -201,14 +203,25 @@ class AbstractSOMap(object):
         """
         (bestNode, bestDist) = self.findNodeForElem(elem)
         bestNode.insert(elem, bestDist)
+        return bestNode
 
     def _assignElements(self):
         """Distribui todos os elementos do conjunto de treinamento entre os
         nodos do SOM.
         """
 
-        for elem in self.elements:
-            self._assignOneElement(elem)
+        if not self._oldAssigns:
+            self._oldAssigns = [None for e in self.elements]
+
+        assignsChanged = False
+
+        for i, elem in enumerate(self.elements):
+            node = self._assignOneElement(elem)
+            if self._oldAssigns[i] is not node:
+                self._oldAssigns[i] = node
+                assignsChanged = True
+
+        return assignsChanged
 
     def _resetNodes(self):
         for node in self.nodes:
@@ -247,8 +260,10 @@ class AbstractSOMap(object):
         self.numSteps += 1
 
         self._resetNodes()
-        self._assignElements()
-        return self._updateNodes()
+        changed = self._assignElements()
+        self._updateNodes()
+
+        return changed
 
     def _printSumary(self, fase):
         m = {
@@ -279,6 +294,11 @@ class AbstractSOMap(object):
             #self._printMap()
 
         self.numLastTrainSteps = trainSteps
+
+    def refine(self):
+        self.conf.applyRefineWeight()
+        self._oldAssigns = None
+        self.train()
 
     def _createSOMNode(self, nid, elem):
         raise NotImplementedError()
@@ -351,8 +371,7 @@ class AbstractSOMap(object):
         self._minimunSpanningTree()
 
         # sys.stdout.write("\nrefinamento\n")
-        self.conf.applyRefineWeight()
-        self.train()
+        self.refine()
         self._updateFVU()
         self._minimunSpanningTree()
         self._printSumary("Refine")

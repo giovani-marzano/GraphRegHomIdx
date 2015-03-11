@@ -1,7 +1,7 @@
 import os
 import sys
 
-sys.path.insert(1,os.path.join(sys.path[0],".."))
+sys.path.insert(1,os.path.join(sys.path[0],"../lib/"))
 
 import math
 import itertools
@@ -69,7 +69,7 @@ def writeDataFile(filename, elements):
                 f.write(str(d))
                 f.write('\t')
             f.write('\n')
-        
+
 def normalizeData(elements):
 
     numElem = len(elements)
@@ -83,7 +83,14 @@ def normalizeData(elements):
             sumSqE[i] += e[i] * e[i]
 
     medias = map(lambda x: x/numElem, sumE)
-    stdDev = map(lambda x,y: math.sqrt(x/numElem - (y*y)), sumSqE, medias)
+
+    def stdDevFun(x, y):
+        print(x,y,numElem)
+        v = (x - (y*y)/numElem)/numElem
+        print('v = ', v)
+        return math.sqrt(v)
+
+    stdDev = map(stdDevFun, sumSqE, sumE)
 
     def normElem(elem):
         return map(lambda x,m,d: (x - m)/d, elem, medias, stdDev)
@@ -364,7 +371,7 @@ def createYCirculos(numSamples):
             dv = randomCirc(*c)
             elements.append(dv)
 
-    writeDataFile('circulos.txt', elements)    
+    writeDataFile('circulos.txt', elements)
 
 def testCirculos():
 
@@ -403,12 +410,32 @@ def testCirculosVet(maxNodes, FVU, wTrain, wRef):
 
     return m
 
+def testSOMFace():
+    elements = readDatafile('nodos.txt', [0,1,2,3,4,5])
+
+    m = somVet.SOMap()
+    m.elements = elements
+
+    outer[1] = m
+
+    m.conf.FVU = 0.20
+    m.conf.maxNodes = 100
+    m.conf.neighWeightTrain = 0.20
+    m.conf.neighWeightRefine = 0.0
+    m.conf.maxStepsPerGeneration = 100
+    #m.conf.minChangeDistSq =
+    m.conf.MSTPeriod = 10
+
+    m.trainGrowingTree()
+
+testSOMFace()
 #createYCirculos(1200)
 #testCirculosVet(100, 0.05, 0.5, 0.5)
 #testCirculosVet(10, 0.2, 0.5, 0.0)
-normalizeSeeds()
+#normalizeSeeds()
 #testSeeds([0,1,2,3,4,5,6], 10, 0.2, 0.5, 0.1, 20)
 #m = testVetSeeds([0,1,2,3,4,5,6], 10, 0.2, 0.5, 0.1, 20)
-m = testVetSeedsGrid([0,1,2,3,4,5,6], 5, 9, 0.5, 0, 20)
+#m = testVetSeedsGrid([0,1,2,3,4,5,6], nrows=10, ncols=10, trainWeight=0.25,
+#        refineWeight=0, maxSteps=100)
 #testSeeds([0,1,2,3,4,5,6], 100, 0.02, 0.5, 0.5, 20)
 #testVetSeeds([0,1,2,3,4,5,6], 100, 0.02, 0.5, 0.5, 20)

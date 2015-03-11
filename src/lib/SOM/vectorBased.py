@@ -19,8 +19,12 @@ if sys.version_info.major < 3:
 def euclidDistSq(a, b):
     """Distancia euclidiana ao quadrado de dois vetores.
     """
+    dist = 0
+    for ax, bx in zip(a,b):
+        v = (ax - bx)
+        dist += v * v
 
-    return sum((pow(ax-bx,2) for ax,bx in zip(a,b)))
+    return dist
 
 class SOMNode(AbstractSOMNode):
     """Representa um nodo do SOM.
@@ -99,8 +103,12 @@ class SOMNode(AbstractSOMNode):
 
     def _calcSumDistFromMeanSquared(self):
         if self._numElem > 0:
-            self._sumDistFromMeanSq = sum((x - (y*y)/self._numElem for x,y in
-                            zip(self._sumSqVect,self._sumVect)))
+            distFromMean = 0
+            for s2, s in zip(self._sumSqVect,self._sumVect):
+                distFromMean += s2 - (s*s)/self._numElem
+            self._sumDistFromMeanSq = distFromMean
+            if self._sumDistFromMeanSq < 0:
+                self._sumDistFromMeanSq = 0
         else:
             self._sumDistFromMeanSq = 0
 
@@ -252,8 +260,7 @@ class SOMap(AbstractSOMap):
             self._printGridSumary("Train",neighDepth,neighDepthMin)
             neighDepth -= 1
 
-        self.conf.applyRefineWeight()
-        self.train()
+        self.refine()
         self._printGridSumary("Refine",neighDepth, neighDepthMin)
 
 
