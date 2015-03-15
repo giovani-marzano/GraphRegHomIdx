@@ -212,10 +212,7 @@ class AppControl(object):
         # Colocando os items em uma heap ordenada por cluster e -1 * o valor de
         # silhueta. Desta forma podemos retira da heap os elementos agrupados
         # por cluster e em ordem decrescente de índice de silhueta
-        items = []
-
-        for e, cluster in elemClusters.items():
-            heapq.heappush(items, (cluster, -1 * elemSilh[e], e))
+        items = silhou.createSilhouetteHeap(elemSilh, elemClusters)
 
         self.logger.info('Salvando {0}...'.format(self.fileNameElemSilh))
         with open(self.fileNameElemSilh, 'w', newline='') as f:
@@ -225,9 +222,9 @@ class AppControl(object):
                     ['silhouette', self.clusterAttr,
                         self.clusterAttr+'_vizinho'])
 
-            for cluster, _, ids in iterHeap(items):
+            for ids, silhouette, cluster in silhou.iterSilhouetteHeap(items):
                 row = list(ids) + [
-                    elemSilh[ids], cluster, neighboor[ids]
+                    silhouette, cluster, neighboor[ids]
                     ]
                 try:
                     csvWriter.writerow(row)

@@ -24,6 +24,7 @@ import graph as gr
 import SOM.vectorBased as somV
 import SOM
 import silhouette as silhou
+import heapq
 
 #---------------------------------------------------------------------
 # Variaveis globais de configuração
@@ -60,6 +61,18 @@ LOG_CONFIG = {
         'level': 'DEBUG'
     }
 }
+
+# Configurações de formato do csv de saída
+CSV_OUT_CONFIG = {
+    'delimiter': '\t',
+    'doublequote': True,
+    'escapechar': '\\',
+    'lineterminator': '\n',
+    'quotechar': '"',
+    'quoting': csv.QUOTE_NONNUMERIC,
+    'skipinitialspace': True
+}
+CSV_OUT_DIALECT='appcsvdialect'
 
 #---------------------------------------------------------------------
 # Classe de controle do aplicativo
@@ -105,6 +118,14 @@ class SOMAppControl(object):
             'nrows': 5, #numero de linhas
             'ncols': 4  #numero de colunas
         }
+
+        self.csvDialectOut = None
+
+    def getCsvDialectOut(self):
+        if self.csvDialectOut is None:
+            return self.csvDialect
+        else:
+            return self.csvDialectOut
 
     def clearDataFile(self):
         self.fileNameData = ''
@@ -217,13 +238,17 @@ class SOMAppControl(object):
         if self.fileNameClusAssoc is None or self.fileNameClusAssoc == '':
             return
 
+        # Colocando em uma heap para imprimir no arquivo agrupado por classe e
+        # ordenado por índice de silhueta (descendente)
+        heap = silhou.createSilhouetteHeap(elemSilh, classes)
+
         with open(self.fileNameClusAssoc, 'w', newline='') as f:
-            csvWriter = csv.writer(f, self.csvDialect, escapechar='\\')
+            csvWriter = csv.writer(f, self.getCsvDialectOut(), escapechar='\\')
             csvWriter.writerow(['#'] + self.idAttrs +
                     ['classe_som','erro_de_quantizacao','silhouette','cluster_vizinho'])
-            for ids in sorted(classes.keys()):
+            for ids, silhouette, cluster in silhou.iterSilhouetteHeap(heap):
                 row = list(ids) + [
-                    classes[ids], quantErr[ids], elemSilh[ids], neighboor[ids]
+                    cluster, quantErr[ids], silhouette, neighboor[ids]
                     ]
                 csvWriter.writerow(row)
 
@@ -248,7 +273,7 @@ import gui
 import textwrap
 
 class ConfigGUI(tk.Frame):
-    def __init__(self, master, logger, **options):
+    def __init__(self, master, control, logger, **options):
         global ARQ_IN
 
         ARQ_IN = ''
@@ -259,7 +284,7 @@ class ConfigGUI(tk.Frame):
         self.master = master
 
         self.logger = logger
-        self.control = SOMAppControl(logger)
+        self.control = control
 
         row = 0
 
@@ -515,8 +540,16 @@ class SOMConfDialog(Dialog):
 if __name__ == '__main__':
     logging.config.dictConfig(LOG_CONFIG)
     logger = logging.getLogger()
+
+    control = SOMAppControl(logger)
+
+    # Configurando csv dialect para escrita
+    if CSV_OUT_CONFIG is not None:
+        csv.register_dialect(CSV_OUT_DIALECT, **CSV_OUT_CONFIG)
+        control.csvDialectOut = CSV_OUT_DIALECT
+
     app = tk.Tk()
     app.title('Self Organizing Map')
-    confGui = ConfigGUI(app, logger)
+    confGui = ConfigGUI(app, control, logger)
     confGui.pack(expand=True, fill='both')
     app.mainloop()
