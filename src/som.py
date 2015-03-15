@@ -65,10 +65,10 @@ LOG_CONFIG = {
 # Configurações de formato do csv de saída
 CSV_OUT_CONFIG = {
     'delimiter': '\t',
-    'doublequote': True,
-    'escapechar': '\\',
     'lineterminator': '\n',
     'quotechar': '"',
+    'escapechar': '\\',
+    'doublequote': False,
     'quoting': csv.QUOTE_NONNUMERIC,
     'skipinitialspace': True
 }
