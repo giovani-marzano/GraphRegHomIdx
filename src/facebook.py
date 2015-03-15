@@ -52,6 +52,16 @@ CSV_OPTIONS = {
     'delimiter': ';'
 }
 
+#CSV_OPTIONS = {
+#    'delimiter': '\t',
+#    'lineterminator': '\n',
+#    'quotechar': '"',
+#    'escapechar': '\\',
+#    'doublequote': False,
+#    'quoting': csv.QUOTE_NONNUMERIC,
+#    'skipinitialspace': True
+#}
+
 # Variáveis que controlam onde os dados de saida do script serão salvos
 DIR_OUTPUT = 'data'
 ARFF_NODOS = os.path.join(DIR_OUTPUT, 'nodos.arff')
@@ -144,10 +154,10 @@ def main(log):
     tiposInteracoes = geral.getEdgeAttrValueSet(RELATION_ATTR);
     log.info('Tipos de relacionamentos no grafo: '+str(list(tiposInteracoes)))
 
-    # processamentoTiposArestasAgregados(geral, log, tiposInteracoes)
+    processamentoTiposArestasAgregados(geral, log, tiposInteracoes)
 
-    for tipo in tiposInteracoes:
-        grafoEquivRegularSoUmTipoAresta(geral, tipo, log)
+    #for tipo in tiposInteracoes:
+    #    grafoEquivRegularSoUmTipoAresta(geral, tipo, log)
 
     log.info('Salvando {}...'.format(ARQ_PROCESSADO))
     geral.writeGraphml(ARQ_PROCESSADO)
@@ -179,7 +189,7 @@ def carregaGrafo(fileName, relationAttr=RELATION_ATTR,
             src = campos[0]
             tgt = campos[1]
             rel = campos[2]
-            weight = int(campos[3])
+            weight = float(campos[3])
 
             g.addEdge(src, tgt, rel)
             e = (src, tgt, rel)
@@ -221,7 +231,7 @@ def processamentoTiposArestasAgregados(geral, log, tiposInteracoes):
     criaArffParaArestas(novo, ARFF_EDGES, edgeInterations)
     log.info('Arquivo {} criado'.format(ARFF_EDGES))
 
-    processaGrafoAgregadoComSOM(novo, log, nodeInterations, edgeInterations)
+    # processaGrafoAgregadoComSOM(novo, log, nodeInterations, edgeInterations)
 
     log.info('Salvando grafo agregado em {}'.format(ARQ_AGREGADO))
     novo.writeGraphml(ARQ_AGREGADO)
