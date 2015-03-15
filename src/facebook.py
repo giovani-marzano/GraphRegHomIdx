@@ -565,7 +565,7 @@ def contandoInteracoesPorNodo(g, tiposInteracoes):
             tipoIn = tipo+'_in'
             contNode = g.getNodeAttr(tgt, tipoIn, 0)
             contNode += contEdge
-            g.setNodeAttr(src, tipoIn, contNode)
+            g.setNodeAttr(tgt, tipoIn, contNode)
 
     return atributos
 
