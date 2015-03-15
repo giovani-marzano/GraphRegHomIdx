@@ -44,22 +44,12 @@ CSV_OPTIONS = {
     'delimiter': '\t'
 }
 
-# Flag que indica se é para retirar sufixos numéricos que aparecerem no final
-# dos nomes das pessoas.
-RETIRAR_SUFIXO_NUMERICO = True
-
-from collections import Counter
-import re
-
 if __name__ == '__main__':
 
     if len(sys.argv) < 3:
         print('Usage: {0} arqIn arqOut'.format(sys.argv[0]))
         sys.exit()
 
-    namePattern = r'^ *(.*?)[0-9]* *$'
-    namePat = re.compile(namePattern)
-    nameCounter = Counter()
     pesos = {}
 
     def addEdge(src, tgt, rel):
@@ -72,14 +62,6 @@ if __name__ == '__main__':
         csvReader = csv.reader(f, **CSV_OPTIONS)
 
         for campos in csvReader:
-            if RETIRAR_SUFIXO_NUMERICO:
-                for i in range(2):
-                    m = namePat.match(campos[i])
-                    if m:
-                        campos[i] = m.group(1)
-                    else:
-                        print('No match ', campos[i])
-
             if campos[2] in RELACOES_INCLUIDAS:
                 addEdge(campos[0], campos[1], campos[2])
                 if campos[2] in RELACOES_NAO_DIRECIONADAS:
