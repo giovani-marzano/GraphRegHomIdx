@@ -316,6 +316,10 @@ class AbstractSOMap(object):
         self.FVU = 1.0
 
     def _updateFVU(self):
+        if self.SStot == 0:
+            print('WARN: SStot = 0')
+            return
+
         sumDistSq = 0.0
         for node in self.nodes:
             sumDistSq += node.getSumDistFromMeanSquared()
