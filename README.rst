@@ -2,7 +2,7 @@ Repositório de arquivos para Trabalho de conclusão de curso
 ###########################################################
 
 :Author: Giovani Melo Marzano
-:Release: 0.5.2
+:Release: 0.5.3
 
 
 Referências
