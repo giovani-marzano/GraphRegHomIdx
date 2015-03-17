@@ -1,6 +1,24 @@
 #!/usr/bin/python3
 # coding: utf-8
 
+"""O script processa um grafo em que os vértices representam as pessoas e as
+arestas representam interações entre duas pessoas no facebook.
+
+O arquivo de entrada pode estar no formato csv ou graphml. No formato csv
+espera-se uma aresta por linha e que as quatro primeiras colunas sejam como a
+seguir:
+
+- Vértice de origem da aresta;
+- Vértice de destino da aresta;
+- Tipo da aresta (relação);
+- Peso da aresta.
+
+No formato graphml, espera-se que exista os seguintes atributos de aresta:
+
+- Relationship: Tipo da interação, que será usado como tipo da aresta;
+- Edge Weight: Peso da aresta
+"""
+
 #---------------------------------------------------------------------
 # Seção de importação de modulos
 #---------------------------------------------------------------------
@@ -48,19 +66,19 @@ WEIGHT_ATTR = 'Edge Weight'
 DIR_INPUT = 'data'
 ARQ_IN = os.path.join(DIR_INPUT,'face.csv')
 
-CSV_OPTIONS = {
-    'delimiter': ';'
-}
-
 #CSV_OPTIONS = {
-#    'delimiter': '\t',
-#    'lineterminator': '\n',
-#    'quotechar': '"',
-#    'escapechar': '\\',
-#    'doublequote': False,
-#    'quoting': csv.QUOTE_NONNUMERIC,
-#    'skipinitialspace': True
+#    'delimiter': ';'
 #}
+
+CSV_OPTIONS = {
+    'delimiter': '\t',
+    'lineterminator': '\n',
+    'quotechar': '"',
+    'escapechar': '\\',
+    'doublequote': False,
+    'quoting': csv.QUOTE_NONNUMERIC,
+    'skipinitialspace': True
+}
 
 # Variáveis que controlam onde os dados de saida do script serão salvos
 DIR_OUTPUT = 'data'
@@ -68,10 +86,6 @@ ARFF_NODOS = os.path.join(DIR_OUTPUT, 'nodos.arff')
 ARFF_EDGES = os.path.join(DIR_OUTPUT, 'edges.arff')
 ARQ_AGREGADO = os.path.join(DIR_OUTPUT,'agregado.graphml')
 ARQ_PROCESSADO = os.path.join(DIR_OUTPUT,'processado.graphml')
-ARQ_SOM_NODES = os.path.join(DIR_OUTPUT,'SOMNodes.graphml')
-ARQ_SOM_GRID_NODES = os.path.join(DIR_OUTPUT,'SOMGridNodes.graphml')
-ARQ_SOM_EDGES = os.path.join(DIR_OUTPUT,'SOMEdges.graphml')
-ARQ_CLASSES_SOM = os.path.join(DIR_OUTPUT, 'classesSOM.graphml')
 
 # Configurações para controlar o algoritmo SOM
 SOM_NODES_CONFIG = {
@@ -135,6 +149,21 @@ LOG_CONFIG = {
 }
 
 #---------------------------------------------------------------------
+# Definição dos argumentos que o programa recebe
+#---------------------------------------------------------------------
+import argparse
+
+def createArgParser():
+    """Create the parser for this script arguments"""
+
+    argParser = argparse.ArgumentParser(
+        description="""Processa um grafo cujas arestas representam interações
+        entre pessoas do facebook."""
+        epilog="""""")
+
+    return argParser
+
+#---------------------------------------------------------------------
 # Função principal do script
 #---------------------------------------------------------------------
 def main(log):
@@ -178,7 +207,7 @@ def carregaGrafo(fileName, relationAttr=RELATION_ATTR,
         g = gr.MultiGraph()
 
         relSpec = gr.AttrSpec(relationAttr,'string')
-        weiSpec = gr.AttrSpec(weightAttr, 'int', 0)
+        weiSpec = gr.AttrSpec(weightAttr, 'double', 0)
 
         g.addEdgeAttrSpec(relSpec)
         g.addEdgeAttrSpec(weiSpec)
@@ -205,14 +234,14 @@ def preprocessaGrafo(geral, log):
     imprimeAtributos(geral, log)
 
     # No grafo que está sendo carregado o atributo WEIGHT_ATTR está como tipo
-    # string e deveria ser inteiro. Aqui convertemos os valores de WEIGHT_ATTR
-    # para inteiro
+    # string e deveria ser numérico. Aqui convertemos os valores de WEIGHT_ATTR
+    # para float
     weights = geral.extractEdgeFeatureVectors([WEIGHT_ATTR])
     geral.removeEdgeAttr(WEIGHT_ATTR)
-    spec = gr.AttrSpec(WEIGHT_ATTR, 'int', 0)
+    spec = gr.AttrSpec(WEIGHT_ATTR, 'double', 0)
     geral.addEdgeAttrSpec(spec)
     for edge, vet in weights.items():
-        geral.setEdgeAttr(edge, WEIGHT_ATTR, int(vet[0]))
+        geral.setEdgeAttr(edge, WEIGHT_ATTR, float(vet[0]))
 
 def processamentoTiposArestasAgregados(geral, log, tiposInteracoes):
     # Agregando as arestas diferentes entre dois nós e contando os tipos de
@@ -231,94 +260,8 @@ def processamentoTiposArestasAgregados(geral, log, tiposInteracoes):
     criaArffParaArestas(novo, ARFF_EDGES, edgeInterations)
     log.info('Arquivo {} criado'.format(ARFF_EDGES))
 
-    # processaGrafoAgregadoComSOM(novo, log, nodeInterations, edgeInterations)
-
     log.info('Salvando grafo agregado em {}'.format(ARQ_AGREGADO))
     novo.writeGraphml(ARQ_AGREGADO)
-
-def processaGrafoAgregadoComSOM(g, log, nodeInterations, edgeInterations):
-
-    # Extraindo os vetores de nodos
-    elements = g.extractNodeFeatureVectors(nodeInterations)
-
-    criaSOMGridParaNodos(log, elements, nodeInterations)
-
-    som = somV.SOMap('Nodes')
-    som.conf.dictConfig(SOM_NODES_CONFIG)
-    som.elements = list(elements.values())
-    log.info('Treinando SOM para nodos...')
-    som.trainGrowingTree()
-    log.info('...ok')
-
-    # Recuperando os classes geradas para cada nodo
-    classes, quantErr = som.classifyMapOfElements(elements)
-
-    # Atribuindo ao nodos do grafo as classes do SOM
-    g.setNodeAttrFromDict('SOM_class', classes, default=-1, attrType='int')
-    g.setNodeAttrFromDict('SOM_quantErr', quantErr, default=0, attrType='double')
-
-    # Salvando o som de nodos
-    gsom = somV.convertSOMapToMultiGraph(som,
-            attrNames=nodeInterations, nodeIDAttr='SOM_class')
-    gsom.writeGraphml(ARQ_SOM_NODES)
-
-    # Mesma coisa para as arestas
-
-    # Extraindo os vetores de arestas
-    elements = g.extractEdgeFeatureVectors(edgeInterations)
-
-    som = somV.SOMap('Edges')
-    som.conf.dictConfig(SOM_EDGES_CONFIG)
-    som.elements = list(elements.values())
-    log.info('Treinando SOM para arestas...')
-    som.trainGrowingTree()
-    log.info('...ok')
-
-    # Recuperando os classes geradas para cada aresta
-    classes, quantErr = som.classifyMapOfElements(elements)
-
-    # Atribuindo às arestas do grafo as classes do SOM
-    g.setEdgeAttrFromDict('SOM_class', classes, default=-1, attrType='int')
-    g.setEdgeAttrFromDict('SOM_quantErr', quantErr, default=0, attrType='double')
-
-    # Salvando o som de nodos
-    gsom = somV.convertSOMapToMultiGraph(som,
-            attrNames=edgeInterations, nodeIDAttr='SOM_class')
-    gsom.writeGraphml(ARQ_SOM_EDGES)
-
-    # gerando grafo de classes
-    gclass = g.spawnFromClassAttributes(nodeClassAttr='SOM_class',
-            edgeClassAttr='SOM_class')
-
-    # Computando atributos agregados
-    attrNodes, attrEdges, specNodes, specEdges = gr.aggregateClassAttr(g,
-        nodeClassAttr='SOM_class', edgeClassAttr='SOM_class',
-        nodeAttrs=nodeInterations, edgeAttrs=edgeInterations)
-
-    gr.addAttributeSetsToGraph(gclass,
-        attrNodes=attrNodes, specNodes=specNodes,
-        attrEdges=attrEdges, specEdges=specEdges)
-
-    log.info("Salvando '{}': {} nodos e {} arestas...".format(ARQ_CLASSES_SOM,
-                gclass.getNumNodes(), gclass.getNumEdges()))
-    gclass.writeGraphml(ARQ_CLASSES_SOM)
-    log.info('...ok')
-
-def criaSOMGridParaNodos(log, elements, nodeInterations):
-    som = somV.SOMap('Nodes HexGrid')
-    som.conf.dictConfig(SOM_GRID_NODES_CONFIG)
-    som.elements = list(elements.values())
-    log.info('Treinando SOM Grid para nodos...')
-    som.trainHexGrid(
-        SOM_GRID_NODES_CONFIG.get('nrows', 5),
-        SOM_GRID_NODES_CONFIG.get('ncols', 4)
-    )
-    log.info('...ok')
-
-    # Salvando o som de nodos
-    gsom = somV.convertSOMapToMultiGraph(som,
-            attrNames=nodeInterations, nodeIDAttr='ID')
-    gsom.writeGraphml(ARQ_SOM_GRID_NODES)
 
 
 class CtrlRegEquiv(object):
