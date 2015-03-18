@@ -17,6 +17,26 @@ No formato graphml, espera-se que exista os seguintes atributos de aresta:
 
 - Relationship: Tipo da interação, que será usado como tipo da aresta;
 - Edge Weight: Peso da aresta
+
+O script gera os seguintes arquivos no diretório de saída:
+
+- nodes.arff: Arquivo arff que para cada nodo do grafo traz, para cada tipo de
+  aresta do grafo, a soma dos pessos das suas arestas de entrada e de saída.
+
+- edges.arff: Arquivo arff traz os pesos de cada tipo de aresta que
+  existem entre pares de nodos do grafo.
+
+- agregado.graphml: Um grafo sem arestas paralelas (só um tipo de aresta) e que
+  possui como atributos de nodos a soma dos pesos de cada tipo de aresta de
+  entrada e saída daquele nodo ( como no arquivo nodes.arff ); e possui como
+  atributos de arestas o peso de cada tipo de aresta correspondente no grafo
+  original ( como no arquivo edges.arff ).
+
+- processado.graphml: Basicamente o grafo de entrada no formato graphml. O
+  processamento realizado é a limpeza de atributos, ou seja, se o grafo de
+  entrada estava no formato graphml e possuía outros atributos que não o tipo e
+  peso de aresta estes serão excluídos. Outro processamento realizado é
+  grarantir que o tipo do atributo de peso de aresta seja 'double'.
 """
 
 #---------------------------------------------------------------------
@@ -62,10 +82,6 @@ RELATION_ATTR = 'Relationship'
 # peso indica quantas interações de um determinado tipo ocorreram.
 WEIGHT_ATTR = 'Edge Weight'
 
-# Variavéis que controlam de onde os dados de entrada serão lidos
-DIR_INPUT = 'data'
-ARQ_IN = os.path.join(DIR_INPUT,'face.csv')
-
 #CSV_OPTIONS = {
 #    'delimiter': ';'
 #}
@@ -82,7 +98,7 @@ CSV_OPTIONS = {
 
 # Variáveis que controlam onde os dados de saida do script serão salvos
 DIR_OUTPUT = 'data'
-ARFF_NODOS = os.path.join(DIR_OUTPUT, 'nodos.arff')
+ARFF_NODOS = os.path.join(DIR_OUTPUT, 'nodes.arff')
 ARFF_EDGES = os.path.join(DIR_OUTPUT, 'edges.arff')
 ARQ_AGREGADO = os.path.join(DIR_OUTPUT,'agregado.graphml')
 ARQ_PROCESSADO = os.path.join(DIR_OUTPUT,'processado.graphml')
@@ -152,25 +168,37 @@ LOG_CONFIG = {
 # Definição dos argumentos que o programa recebe
 #---------------------------------------------------------------------
 import argparse
+import inspect
+import textwrap
 
 def createArgParser():
     """Create the parser for this script arguments"""
 
     argParser = argparse.ArgumentParser(
-        description="""Processa um grafo cujas arestas representam interações
-        entre pessoas do facebook."""
-        epilog="""""")
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=textwrap.fill(
+            "Processa um grafo cujas arestas representam interações "+
+            "entre pessoas do facebook.", 80),
+        epilog=inspect.getdoc(sys.modules[__name__]))
+
+    argParser.add_argument('-H', '--header', action='store_true',
+            default=False, dest='hasHeaders',
+            help="""Indica que a primeira linha do csv é cabeçalho. O default é
+                considerar que a primeira linha também é dado.""")
+
+    argParser.add_argument('arqIn',
+        help="""Arquivo de entrada. Pode ser um .csv ou um .graphml""")
 
     return argParser
 
 #---------------------------------------------------------------------
 # Função principal do script
 #---------------------------------------------------------------------
-def main(log):
+def main(args, log):
     """Função principal do script, executada no final do arquivo.
     """
-    log.info('Carregando grafo {}...'.format(ARQ_IN))
-    geral = carregaGrafo(ARQ_IN, relationAttr=RELATION_ATTR)
+    log.info('Carregando grafo {}...'.format(args.arqIn))
+    geral = carregaGrafo(args, relationAttr=RELATION_ATTR)
     log.info('... carregado: {} nodos e {} arestas'.format(geral.getNumNodes(),
                 geral.getNumEdges()))
 
@@ -196,13 +224,13 @@ def main(log):
 # Definição das funções auxiliares e procedimentos macro do script
 #---------------------------------------------------------------------
 
-def carregaGrafo(fileName, relationAttr=RELATION_ATTR,
+def carregaGrafo(args, relationAttr=RELATION_ATTR,
         weightAttr=WEIGHT_ATTR):
 
-    _, ext = os.path.splitext(ARQ_IN)
+    _, ext = os.path.splitext(args.arqIn)
 
     if ext == '.graphml':
-        g = gr.loadGraphml(ARQ_IN, relationAttr=RELATION_ATTR)
+        g = gr.loadGraphml(args.arqIn, relationAttr=RELATION_ATTR)
     elif ext == '.csv':
         g = gr.MultiGraph()
 
@@ -212,18 +240,26 @@ def carregaGrafo(fileName, relationAttr=RELATION_ATTR,
         g.addEdgeAttrSpec(relSpec)
         g.addEdgeAttrSpec(weiSpec)
 
-        csvReader = csv.reader(open(ARQ_IN, newline=''), **CSV_OPTIONS)
+        with open(args.arqIn, newline='') as f:
 
-        for campos in csvReader:
-            src = campos[0]
-            tgt = campos[1]
-            rel = campos[2]
-            weight = float(campos[3])
+            csvReader = csv.reader(f, **CSV_OPTIONS)
 
-            g.addEdge(src, tgt, rel)
-            e = (src, tgt, rel)
-            g.setEdgeAttr(e, relSpec.name, rel)
-            g.setEdgeAttr(e, weiSpec.name, weight)
+            if args.hasHeaders:
+                # Pulando a prinmeira linha
+                for _ in csvReader:
+                    break
+
+            for campos in csvReader:
+                src = campos[0]
+                tgt = campos[1]
+                rel = campos[2]
+                weight = float(campos[3])
+
+                g.addEdge(src, tgt, rel)
+                e = (src, tgt, rel)
+                g.setEdgeAttr(e, relSpec.name, rel)
+                g.setEdgeAttr(e, weiSpec.name, weight)
+
     else:
         raise IOError("Tipo de arquivo não suportado - '{}'".format(ext))
 
@@ -639,6 +675,11 @@ def imprimeAtributos(g, log):
 # Execução do script
 #---------------------------------------------------------------------
 if __name__ == '__main__':
+    argParser = createArgParser()
+
+    args = argParser.parse_args()
+
     logging.config.dictConfig(LOG_CONFIG)
     logger = logging.getLogger()
-    main(logger)
+
+    main(args, logger)
