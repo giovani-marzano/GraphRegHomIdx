@@ -7,6 +7,7 @@ import logging
 import logging.config
 import traceback
 import math
+import csv
 
 # Acrescentando o diretorio lib ao path. Lembrando que sys.path[0] representa o
 # diretório onde este script se encontra
@@ -48,11 +49,22 @@ LOG_CONFIG = {
     }
 }
 
+# Configurações de formato do csv de saída
+CSV_OUT_CONFIG = {
+    'delimiter': '\t',
+    'lineterminator': '\n',
+    'quotechar': '"',
+    'escapechar': '\\',
+    'doublequote': False,
+    'quoting': csv.QUOTE_NONNUMERIC,
+    'skipinitialspace': True
+}
+CSV_OUT_DIALECT='appcsvdialect'
+
 #---------------------------------------------------------------------
 # Classes de controle
 #---------------------------------------------------------------------
 import graph as gr
-import csv
 
 class GraphModel(object):
     def __init__(self, graphObj, name, filename=None):
@@ -76,6 +88,18 @@ class GraphAppControl(object):
         self.insertHandlers = []
         self.deleteHandlers = []
         self.changeHandlers = []
+
+        self.csvDialectOut = None
+        # Configurando csv dialect para escrita
+        if CSV_OUT_CONFIG is not None:
+            csv.register_dialect(CSV_OUT_DIALECT, **CSV_OUT_CONFIG)
+            self.csvDialectOut = CSV_OUT_DIALECT
+
+    def getCsvDialectOut(self):
+        if self.csvDialectOut:
+            return self.csvDialectOut
+        else:
+            return self.csvDialect
 
     def addInsertHandler(self, handler):
         """Insert handlers that will be called whenever a graph is inserted in
@@ -448,7 +472,7 @@ class GraphAppControl(object):
         gmod = self.graphModels[graphName]
 
         with open(filename, 'w', newline='') as f:
-            writer = csv.writer(f, self.csvDialect)
+            writer = csv.writer(f, self.getCsvDialectOut())
 
             if attrScope == 'node':
                 headings = ['node']
@@ -2103,11 +2127,14 @@ class OpenGraphmlDialog(Dialog):
         dialog = gui.ListSelectionDialog(self, title='Atributo de relação',
             text='Selecione o atributo que indica a relação ' +
                 'a que cada aresta pertence (tipo da aresta).',
-            items=self.edgeAttrs)
+            items=['<nenhum>'] + self.edgeAttrs)
 
         if dialog.result is not None:
-            for _, attr in dialog.result:
-                self.relationAttr.set(attr)
+            for i, attr in dialog.result:
+                if i > 0:
+                    self.relationAttr.set(attr)
+                else:
+                    self.relationAttr.set('')
                 break
 
     def apply(self):
