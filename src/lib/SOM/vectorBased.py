@@ -332,6 +332,12 @@ def convertSOMapToMultiGraph(som, attrNames=[], nodeIDAttr='ID'):
     idSpec = gr.AttrSpec(nodeIDAttr, 'int', 0)
     g.addNodeAttrSpec(idSpec)
 
+    xposSpec = gr.AttrSpec('x', 'double', 0)
+    g.addNodeAttrSpec(xposSpec)
+
+    yposSpec = gr.AttrSpec('y', 'double', 0)
+    g.addNodeAttrSpec(yposSpec)
+
     # Criando atributos de aresta
     distSpec = gr.AttrSpec('dist', 'double', 0)
     g.addEdgeAttrSpec(distSpec)
@@ -347,6 +353,9 @@ def convertSOMapToMultiGraph(som, attrNames=[], nodeIDAttr='ID'):
         else:
             disp = 0.0
         g.setNodeAttr(n, dispSpec.name, disp)
+
+        g.setNodeAttr(n, xposSpec.name, getattr(node,'x',node.getID()))
+        g.setNodeAttr(n, yposSpec.name, getattr(node,'y',0))
 
         g.setNodeAttr(n, idSpec.name, n)
         mean = node.getMeanElement()
