@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 
 import csv
 import math
@@ -86,33 +87,49 @@ def polyLinearFromNtiles(ntiles, oini, oend):
 
     return PolyLinear(points=points)
 
-def processaCsv(fileIn, fileOut, procFuncs, outHeader=None, skipFirstRow=True):
+def processaCsv(fileIn, fileOut,
+        outHeader=None,
+        procFuncs=[], filterFuncs=[]):
+
     with open(fileIn, newline='') as fin, \
         open(fileOut, 'w', newline='') as fout:
-        reader = csv.reader(fin, dialect='tab-quoted')
+
+        dialectIn = csv.Sniffer().sniff(fin.read(2048))
+        fin.seek(0)
+        reader = csv.reader(fin, dialect=dialectIn)
         writer = csv.writer(fout, dialect='tab-quoted')
 
-        if skipFirstRow:
-            for _ in reader:
-                break
+        rowNum = 0
 
         if outHeader:
             writer.writerow(outHeader)
 
         for rowIn in reader:
-            rowOut = []
+            doRow = True
+            for filt in filterFuncs:
+                if not filt(rowNum, rowIn):
+                    doRow = False
+                    break
+            if doRow:
+                rowOut = []
+                for func in procFuncs:
+                    r = func(rowIn)
+                    rowOut += r
 
-            for func in procFuncs:
-                r = func(rowIn)
-                rowOut += r
+                writer.writerow(rowOut)
 
-            writer.writerow(rowOut)
+            rowNum += 1
 
+def genSkipRows(rowsToSkip):
+    def skipRows(rowNum, _):
+        return rowNum not in rowsToSkip
 
-def genColorFromNtiles(rowNum, ntiles, grays=False):
+    return skipRows
+
+def genColorFromNtiles(colNum, ntiles, grays=False):
     """
-    genColorFromNtiles(rowNum, ntiles, grays) ->
-        colorValue([...,rowNum value, ...]) -> [color]
+    genColorFromNtiles(colNum, ntiles, grays) ->
+        colorValue([...,colNum value, ...]) -> [color]
     """
 
     if grays:
@@ -125,7 +142,7 @@ def genColorFromNtiles(rowNum, ntiles, grays=False):
             return colorsys.hsv_to_rgb(v, 1.0, 1.0)
 
     def colorValue(rowIn):
-        x = float(rowIn[rowNum])
+        x = float(rowIn[colNum])
 
         y = polyline(x)
 
@@ -143,10 +160,10 @@ def genColorFromNtiles(rowNum, ntiles, grays=False):
 
     return colorValue
 
-def genNumElemToTamanho(rowNum, tamRef, numElemRef):
+def genNumElemToTamanho(colNum, tamRef, numElemRef):
     """Gera uma função que converte numero de elementos em tamanho de nodo.
 
-    genNumElemToTamanho(rowNum, tamRef, numElemRef) ->
+    genNumElemToTamanho(colNum, tamRef, numElemRef) ->
             numElemToTamanho([...,numElem,...]) -> [tamanho]
     """
 
@@ -156,24 +173,25 @@ def genNumElemToTamanho(rowNum, tamRef, numElemRef):
         """numElemToTamanho([...,numElem,...]) -> [tamanho]
         """
 
-        numElem = float(rowIn[rowNum])
+        numElem = float(rowIn[colNum])
 
         return [math.sqrt(alpha*numElem)]
 
     return numElemToTamanho
 
-def genIdentity(rowNum):
+def genIdentity(colNum):
     """
-    genIdentity(rowNum) ->
-        identity([...,rowNum value,...]) -> [rowNum value]
+    genIdentity(colNum) ->
+        identity([...,colNum value,...]) -> [colNum value]
     """
 
     def identity(rowIn):
-        return [rowIn[rowNum]]
+        return [rowIn[colNum]]
 
     return identity
 
-if __name__ == '__main__':
+def exp01():
+    """Processamento para o experimento 01"""
 
     processaCsv('data/refsComLegenda.csv', 'data/procRefs.csv',
         outHeader=['node','tamanho',
@@ -207,4 +225,109 @@ if __name__ == '__main__':
             genColorFromNtiles(6,[0.0, 0.0001, 0.0035    , 0.0972, 0.7917],True),
             genColorFromNtiles(7,[0.0, 0.0   , 4.59648e-8, 0.3333, 0.4583],True),
             genColorFromNtiles(5,[-0.2318, 0.0, 0.1003, 0.5156, 1.0],True),
+        ],
+        filterFuncs=[genSkipRows([0])])
+
+def exp02_01():
+    processaCsv('data/nodesNorm.csv','data/Post_Author_in.csv',
+        outHeader=['ID','Post_Author_in'],
+        filterFuncs=[
+            genSkipRows([0]),
+            lambda i, r: float(r[1]) > 0.0
+        ],
+        procFuncs=[
+            genIdentity(0),
+            lambda r: [float(r[1])]
         ])
+    processaCsv('data/nodesNorm.csv','data/Post_Author_out.csv',
+        outHeader=['ID','Post_Author_out'],
+        filterFuncs=[
+            genSkipRows([0]),
+            lambda i, r: float(r[2]) > 0.0
+        ],
+        procFuncs=[
+            genIdentity(0),
+            lambda r: [float(r[2])]
+        ])
+    processaCsv('data/nodesNorm.csv','data/Commenter_in.csv',
+        outHeader=['ID','Commenter_in'],
+        filterFuncs=[
+            genSkipRows([0]),
+            lambda i, r: float(r[3]) > 0.0
+        ],
+        procFuncs=[
+            genIdentity(0),
+            lambda r: [float(r[3])]
+        ])
+    processaCsv('data/nodesNorm.csv','data/Commenter_out.csv',
+        outHeader=['ID','Commenter_out'],
+        filterFuncs=[
+            genSkipRows([0]),
+            lambda i, r: float(r[4]) > 0.0
+        ],
+        procFuncs=[
+            genIdentity(0),
+            lambda r: [float(r[4])]
+        ])
+    processaCsv('data/nodesNorm.csv','data/Liker_in.csv',
+        outHeader=['ID','Liker_in'],
+        filterFuncs=[
+            genSkipRows([0]),
+            lambda i, r: float(r[5]) > 0.0
+        ],
+        procFuncs=[
+            genIdentity(0),
+            lambda r: [float(r[5])]
+        ])
+    processaCsv('data/nodesNorm.csv','data/Liker_out.csv',
+        outHeader=['ID','Liker_out'],
+        filterFuncs=[
+            genSkipRows([0]),
+            lambda i, r: float(r[6]) > 0.0
+        ],
+        procFuncs=[
+            genIdentity(0),
+            lambda r: [float(r[6])]
+        ])
+
+def exp02_02():
+    processaCsv('data/refs.csv', 'data/procRefs.csv',
+        outHeader=['node','tamanho',
+            'Commenter_in_color',
+            'Commenter_out_color',
+            'Liker_in_color',
+            'Liker_out_color',
+            'Post_Author_in_color',
+            'Post_Author_out_color',
+            'Commenter_in_gray',
+            'Commenter_out_gray',
+            'Liker_in_gray',
+            'Liker_out_gray',
+            'Post_Author_in_gray',
+            'Post_Author_out_gray',
+            'Node silhouette_gray'
+        ],
+        procFuncs=[
+            genIdentity(0),
+            genNumElemToTamanho(8,100, 10977),
+            genColorFromNtiles(1,[0.0   , 0.0   , 0.0037, 0.0633, 0.1752]),
+            genColorFromNtiles(2,[0.0   , 0.02  , 0.1381, 0.2120, 0.4500]),
+            genColorFromNtiles(3,[0.0   , 0.0   , 0.0049, 0.1174, 0.4303]),
+            genColorFromNtiles(4,[0.0246, 0.0408, 0.0809, 0.2110, 0.4365]),
+            genColorFromNtiles(6,[0.0001, 0.0004, 0.0082, 0.1409, 0.4750]),
+            genColorFromNtiles(7,[0.0   , 0.0   , 0.1667, 0.3394, 0.4222]),
+            genColorFromNtiles(1,[0.0   , 0.0   , 0.0037, 0.0633, 0.1752],True),
+            genColorFromNtiles(2,[0.0   , 0.0200, 0.1381, 0.2120, 0.4500],True),
+            genColorFromNtiles(3,[0.0   , 0.0   , 0.0049, 0.1174, 0.4303],True),
+            genColorFromNtiles(4,[0.0246, 0.0408, 0.0809, 0.2110, 0.4365],True),
+            genColorFromNtiles(6,[0.0001, 0.0004, 0.0082, 0.1409, 0.4750],True),
+            genColorFromNtiles(7,[0.0   , 0.0   , 0.1667, 0.3394, 0.4222],True),
+            genColorFromNtiles(5,[-0.2534, 0.9773],True),
+        ],
+        filterFuncs=[genSkipRows([0])])
+
+
+if __name__ == '__main__':
+    #exp01()
+    #exp02_01()
+    exp02_02()
