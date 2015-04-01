@@ -126,25 +126,23 @@ def genSkipRows(rowsToSkip):
 
     return skipRows
 
-def genColorFromNtiles(colNum, ntiles, grays=False):
+def genColorFromFunc(colNum, func, grays=False):
     """
-    genColorFromNtiles(colNum, ntiles, grays) ->
+    genColorFromFunc(colNum, ntiles, grays) ->
         colorValue([...,colNum value, ...]) -> [color]
     """
 
     if grays:
-        polyline = polyLinearFromNtiles(ntiles, 0.0, 1.0)
         def value2rgb(v):
             return colorsys.hsv_to_rgb(0.0, 0.0, v)
     else:
-        polyline = polyLinearFromNtiles(ntiles, 2.0/3.0, 0.0)
         def value2rgb(v):
             return colorsys.hsv_to_rgb(v, 1.0, 1.0)
 
     def colorValue(rowIn):
         x = float(rowIn[colNum])
 
-        y = polyline(x)
+        y = func(x)
 
         if y < 0: y = 0
         elif y > 1: y = 1
@@ -159,6 +157,19 @@ def genColorFromNtiles(colNum, ntiles, grays=False):
         return [color]
 
     return colorValue
+
+def genColorFromNtiles(colNum, ntiles, grays=False):
+    """
+    genColorFromNtiles(colNum, ntiles, grays) ->
+        colorValue([...,colNum value, ...]) -> [color]
+    """
+
+    if grays:
+        polyline = polyLinearFromNtiles(ntiles, 1.0, 0.0)
+    else:
+        polyline = polyLinearFromNtiles(ntiles, 2.0/3.0, 0.0)
+
+    return genColorFromFunc(colNum, polyline, grays)
 
 def genNumElemToTamanho(colNum, tamRef, numElemRef):
     """Gera uma função que converte numero de elementos em tamanho de nodo.
@@ -191,6 +202,10 @@ def genIdentity(colNum):
     return identity
 
 def exp01():
+    exp01_01()
+    exp01_02()
+
+def exp01_01():
     """Processamento para o experimento 01"""
 
     processaCsv('data/refsComLegenda.csv', 'data/procRefs.csv',
@@ -212,23 +227,58 @@ def exp01():
         procFuncs=[
             genIdentity(0),
             genNumElemToTamanho(8,100, 9910),
-            genColorFromNtiles(1,[0.0, 0.0   , 9.15108e-9, 0.0117, 0.3082]),
-            genColorFromNtiles(2,[0.0, 0.0   , 0.0512    , 0.1567, 0.6458]),
-            genColorFromNtiles(3,[0.0, 0.0   , 2.36743e-8, 0.0314, 0.3758]),
-            genColorFromNtiles(4,[0.0, 0.0385, 0.0810    , 0.1510, 0.5409]),
-            genColorFromNtiles(6,[0.0, 0.0001, 0.0035    , 0.0972, 0.7917]),
-            genColorFromNtiles(7,[0.0, 0.0   , 4.59648e-8, 0.3333, 0.4583]),
-            genColorFromNtiles(1,[0.0, 0.0   , 9.15108e-9, 0.0117, 0.3082],True),
-            genColorFromNtiles(2,[0.0, 0.0   , 0.0512    , 0.1567, 0.6458],True),
-            genColorFromNtiles(3,[0.0, 0.0   , 2.36743e-8, 0.0314, 0.3758],True),
-            genColorFromNtiles(4,[0.0, 0.0385, 0.0810    , 0.1510, 0.5409],True),
-            genColorFromNtiles(6,[0.0, 0.0001, 0.0035    , 0.0972, 0.7917],True),
-            genColorFromNtiles(7,[0.0, 0.0   , 4.59648e-8, 0.3333, 0.4583],True),
+            genColorFromNtiles(1,[0.0, 0.0   , 0.0   , 0.0117, 0.3082]),
+            genColorFromNtiles(2,[0.0, 0.0   , 0.0512, 0.1567, 0.6458]),
+            genColorFromNtiles(3,[0.0, 0.0   , 0.0   , 0.0314, 0.3758]),
+            genColorFromNtiles(4,[0.0, 0.0385, 0.0810, 0.1510, 0.5409]),
+            genColorFromNtiles(6,[0.0, 0.0001, 0.0035, 0.0972, 0.7917]),
+            genColorFromNtiles(7,[0.0, 0.0   , 0.0   , 0.3333, 0.4583]),
+            genColorFromNtiles(1,[0.0, 0.0   , 0.0   , 0.0117, 0.3082],True),
+            genColorFromNtiles(2,[0.0, 0.0   , 0.0512, 0.1567, 0.6458],True),
+            genColorFromNtiles(3,[0.0, 0.0   , 0.0   , 0.0314, 0.3758],True),
+            genColorFromNtiles(4,[0.0, 0.0385, 0.0810, 0.1510, 0.5409],True),
+            genColorFromNtiles(6,[0.0, 0.0001, 0.0035, 0.0972, 0.7917],True),
+            genColorFromNtiles(7,[0.0, 0.0   , 0.0   , 0.3333, 0.4583],True),
             genColorFromNtiles(5,[-0.2318, 0.0, 0.1003, 0.5156, 1.0],True),
         ],
         filterFuncs=[genSkipRows([0])])
 
+def exp01_02():
+    """Denormalizando os atributos: Multiplicando o atributo normalizado pelo
+    valor máximo do atributo original. Isto porque o valor mínimo de todos os
+    atributos é 0 e eles foram normalizados linermente para o intervalo [0,1].
+    """
+
+    processaCsv('data/refsComLegenda.csv', 'data/procRefsOrig.csv',
+        outHeader=['node',
+            'Commenter_in_ref_orig',
+            'Commenter_out_ref_orig',
+            'Liker_in_ref_orig',
+            'Liker_out_ref_orig',
+            'Post_Author_in_ref_orig',
+            'Post_Author_out_ref_orig'
+        ],
+        procFuncs=[
+            genIdentity(0),
+            lambda r: [float(r[1]) * 139],
+            lambda r: [float(r[2]) * 8],
+            lambda r: [float(r[3]) * 541],
+            lambda r: [float(r[4]) * 26],
+            lambda r: [float(r[6]) * 12],
+            lambda r: [float(r[7]) * 3],
+        ],
+        filterFuncs=[genSkipRows([0])])
+
 def exp02_01():
+    """
+    Criando arquivos para cada atributo de nodo que possuam apenas os nodos em
+    que o atributo seja maior que zero.
+
+    Isto foi feito pois para todos os atributos muitos nodos os tem como zero. E
+    queremos saber a distribuição (quartis) dos valores de cada atributo para os
+    nodos que realmente possuem aquele atributo, ou seja, para as pessoas que
+    realmente possuem aquele tipo de interação.
+    """
     processaCsv('data/nodesNorm.csv','data/Post_Author_in.csv',
         outHeader=['ID','Post_Author_in'],
         filterFuncs=[
@@ -291,6 +341,9 @@ def exp02_01():
         ])
 
 def exp02_02():
+    """
+    Gerando cores a partir dos valores de referência dos nodos do SOM.
+    """
     processaCsv('data/refs.csv', 'data/procRefs.csv',
         outHeader=['node','tamanho',
             'Commenter_in_color',
@@ -326,8 +379,37 @@ def exp02_02():
         ],
         filterFuncs=[genSkipRows([0])])
 
+def exp02_03():
+    """
+    Processando os elementos do arquivo de silhuetas para classificar a relação
+    com o vizinho de acordo com o sinal do índice de silhueta: positivo o
+    elemento está mais próximo ao cluster vizinho que a outros clusters;
+    negativo o elemento prefiria estar no cluster vizinho que no atual.
+    """
+    def silhouetteClass(v):
+        if v < 0:
+            return 'negative'
+        else:
+            return 'positive'
+
+    processaCsv('data/somTreeElem.csv','data/negativeElem.csv',
+        outHeader=['ID','classe_som','silhouette','cluster_vizinho','Relation'],
+        filterFuncs=[
+            genSkipRows([0])
+        ],
+        procFuncs=[
+            genIdentity(1),
+            genIdentity(2),
+            lambda r: [float(r[4])],
+            genIdentity(5),
+            lambda r: [silhouetteClass(float(r[4]))]
+        ])
+
+def exp02():
+    exp02_01()
+    exp02_02()
+    exp02_03()
 
 if __name__ == '__main__':
-    #exp01()
-    #exp02_01()
-    exp02_02()
+    exp01()
+    #exp02()
