@@ -179,6 +179,15 @@ class GraphAppControl(object):
     def getGraphModel(self, graphName):
         return self.graphModels.get(graphName)
 
+    def getExistentGraphModel(self, graphName):
+        gmod = self.getGraphModel(graphName)
+
+        if gmod is None:
+            raise ValueError(
+                "Grafo '{0}' não existe".format(graphName))
+
+        return gmod
+
     def insertGraph(self, g, name=None, filename=None):
         if name is None or name == '':
             name = self.generateNumericName()
@@ -352,11 +361,7 @@ class GraphAppControl(object):
             attrCols, attrSpecs,
             firstRowIsHeading):
 
-        if graphName not in self.graphModels.keys():
-            raise ValueError(
-                "Grafo '{0}' não existe".format(graphName))
-
-        gmod = self.graphModels[graphName]
+        gmod = self.getExistentGraphModel(graphName)
 
         attrNames = gmod.graph.getNodeAttrNames()
         for spec in attrSpecs:
@@ -378,11 +383,7 @@ class GraphAppControl(object):
             attrCols, attrSpecs,
             firstRowIsHeading):
 
-        if graphName not in self.graphModels.keys():
-            raise ValueError(
-                "Grafo '{0}' não existe".format(graphName))
-
-        gmod = self.graphModels[graphName]
+        gmod = self.getExistentGraphModel(graphName)
 
         attrNames = gmod.graph.getEdgeAttrNames()
         for spec in attrSpecs:
@@ -465,11 +466,7 @@ class GraphAppControl(object):
             raise ValueError(
                 "Escopo de atributo '{0}' desconhecido.".format(attrScope))
 
-        if graphName not in self.graphModels.keys():
-            raise KeyError(
-                "Grafo '{0}' não existe".format(graphName))
-
-        gmod = self.graphModels[graphName]
+        gmod = self.getExistentGraphModel(graphName)
 
         with open(filename, 'w', newline='') as f:
             writer = csv.writer(f, self.getCsvDialectOut())
@@ -498,6 +495,24 @@ class GraphAppControl(object):
                         row.append(gmod.graph.getEdgeAttr(item, attr))
                     writer.writerow(row)
         # end with
+
+    def removeAttributes(self, graphName, attrScope, attrNames):
+        """Remove the supplied attributes from the graph.
+        """
+
+        gmod = self.getExistentGraphModel(graphName)
+
+        if attrScope == 'node':
+            for attr in attrNames:
+                gmod.graph.removeNodeAttr(attr)
+        elif attrScope == 'edge':
+            for attr in attrNames:
+                gmod.graph.removeEdgeAttr(attr)
+        elif attrScope == 'graph':
+            for attr in attrNames:
+                gmod.graph.removeGraphAttr(attr)
+
+        self._callChangeHandlers(gmod)
 
     def classifyByRegularEquivalence(self, graphName, classAttr,
             preClassAttr=None, edgeClassAttr=None, maxIterations=0,
@@ -994,8 +1009,8 @@ class GraphAppGUI(tk.Frame):
             command=self.menuCmdImportNodeAttr)
         m.add_command(label='Exportar atributos para csv...',
             command=self.menuCmdExportNodeAttr)
-        #m.add_command(label='#Remover atributos...',
-        #    command=self.menuCmdNotImplemented)
+        m.add_command(label='Remover atributos...',
+            command=self.menuCmdRemoveNodeAttr)
         #m.add_separator()
         #m.add_command(label='#Criar agregador...',
         #    command=self.menuCmdNotImplemented)
@@ -1016,8 +1031,8 @@ class GraphAppGUI(tk.Frame):
             command=self.menuCmdImportEdgeAttr)
         m.add_command(label='Exportar atributos para csv...',
             command=self.menuCmdExportEdgeAttr)
-        #m.add_command(label='#Remover atributos...',
-        #    command=self.menuCmdNotImplemented)
+        m.add_command(label='Remover atributos...',
+            command=self.menuCmdRemoveEdgeAttr)
         #m.add_separator()
         #m.add_command(label='#Criar agregador...',
         #    command=self.menuCmdNotImplemented)
@@ -1055,6 +1070,19 @@ class GraphAppGUI(tk.Frame):
 
     def menuCmdExportNodeAttr(self):
         self._cmdExportAttr('node')
+
+    def _cmdRemoveAttr(self, attrScope):
+        gsel = self.getSelectedGraph()
+        if gsel is not None:
+            gsel = gsel.name
+        d = RemoveAttributesDialog(self, self.control, attrScope, gsel)
+        self.consumeQueue()
+
+    def menuCmdRemoveEdgeAttr(self):
+        self._cmdRemoveAttr('edge')
+
+    def menuCmdRemoveNodeAttr(self):
+        self._cmdRemoveAttr('node')
 
     def menuCmdQuit(self, event=None):
         self.quit()
@@ -1641,6 +1669,114 @@ class ExportAttributesDialog(Dialog):
                 attrScope=self.attrScope, attrNames=self.selectedAttrs)
         except Exception as ex:
             gui.showExceptionMsg(ex, 'Falha na exportação de atributos',
+                self.control.logger)
+
+class RemoveAttributesDialog(Dialog):
+    def __init__(self, master, control, attrScope, selectedGraph=''):
+
+        self.control = control
+        self.attrScope = attrScope
+
+        self.graphName = tk.StringVar()
+
+        self.attrs = []
+        self.selectedAttrs = []
+        self.attrsTxt = tk.StringVar()
+
+        if selectedGraph:
+            self._setGraphName(selectedGraph)
+
+        super().__init__(master, 'Remoção de atributos')
+
+    def _setGraphName(self, graphName):
+        self.graphName.set(graphName)
+
+        gmod = self.control.getGraphModel(graphName)
+        if gmod:
+            if self.attrScope == 'node':
+                self.attrs = sorted(gmod.graph.getNodeAttrNames())
+            elif self.attrScope == 'edge':
+                self.attrs = sorted(gmod.graph.getEdgeAttrNames())
+        else:
+            self.attrs = []
+
+        self.selectedAttrs = []
+        self.attrsTxt.set(str(self.selectedAttrs))
+
+    def body(self, master):
+        master.columnconfigure(1, weight=1)
+        labelwidth = 25
+        row = 0
+
+        lb = ttk.Label(master, text='Grafo:', anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.graphName, state='readonly')
+        btn = ttk.Button(master, text='Escolher...',
+                command=self._doBtnChooseGraph)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry, btn)
+
+        lb = ttk.Label(master, text='Atributos:', anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.attrsTxt,
+                state='readonly')
+        bt = ttk.Button(master, text='Escolher...', state='disabled',
+                command=self._doBtnChooseAttrCols)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry, bt)
+
+        self.attrColsButton = bt
+
+        self._updateButtonStates()
+
+        master.pack(fill='both', expand=True)
+
+    def _doBtnChooseGraph(self):
+        graphs = self.control.getGraphNames()
+        dialog = gui.ListSelectionDialog(self, title='Escolha de grafo',
+            text='Escolha o grafo cujos atributos serão removidos',
+            items=graphs, selected=self.graphName.get())
+
+        if dialog.result:
+            for i, sel in dialog.result:
+                self._setGraphName(sel)
+                self._updateButtonStates()
+                break
+
+    def _doBtnChooseAttrCols(self):
+        dialog = gui.ListSelecManyDialog(self,
+            title='Seleção de atributos',
+            text='Selecione os atributos que devem ser removidos.',
+            items=self.attrs, selected=self.selectedAttrs)
+
+        if dialog.result is not None:
+            self.selectedAttrs = [t for _, t in dialog.result]
+            self.attrsTxt.set(str(self.selectedAttrs))
+            self._updateButtonStates()
+
+    def _updateButtonStates(self):
+        btnState = tk.DISABLED
+        if self.attrs:
+            btnState = tk.NORMAL
+
+        self.attrColsButton['state'] = btnState
+
+    def validate(self):
+        isOk = True
+        errMsg = ''
+
+        if not self.graphName.get():
+            errMsg = 'O grafo não foi escolhido!'
+            isOk = False
+
+        if not isOk:
+            tk.messagebox.showwarning('Problema na configuração',
+                errMsg)
+
+        return isOk
+
+    def apply(self):
+        try:
+            self.control.removeAttributes(graphName=self.graphName.get(),
+                attrScope=self.attrScope, attrNames=self.selectedAttrs)
+        except Exception as ex:
+            gui.showExceptionMsg(ex, 'Falha na remoção de atributos',
                 self.control.logger)
 
 class ClassifyRegularEquivDialog(Dialog):
