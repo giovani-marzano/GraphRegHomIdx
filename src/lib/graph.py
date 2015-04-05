@@ -1054,7 +1054,7 @@ def writeGraphml(mGraph, filePath, encoding="UTF-8"):
     nodeIDs = {}
     for n, node in enumerate(mGraph.nodes()):
         if isinstance(node, int):
-            nodeIDs[node] = 'n{}'.format(node)
+            nodeIDs[node] = '{}'.format(node)
         elif isinstance(node, str):
             nodeIDs[node] = node
         else:
