@@ -991,6 +991,8 @@ class GraphAppGUI(tk.Frame):
         self.menuBar.add_cascade(label='Grafo', menu=m)
         m.add_command(label='Novo...', command=self.menuCmdNewGraph)
         m.add_command(label='Remover...', command=self.menuCmdRemoveGraph)
+        #m.add_command(label='#Incluir nodos e arestas de csv...',
+        #    command=self.menuCmdNotImplemented)
         #m.add_separator()
         #m.add_command(label='#Adicionar atributo...',
         #    command=self.menuCmdNotImplemented)
