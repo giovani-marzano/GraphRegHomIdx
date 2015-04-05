@@ -201,9 +201,40 @@ def genIdentity(colNum):
 
     return identity
 
-def exp01():
-    exp01_01()
-    exp01_02()
+#-------------------------------------------------------------------------
+# Funções específicas dos experimentos
+#-------------------------------------------------------------------------
+
+def arestasVizinhancaDeSilhueta(arqIn,arqOut):
+    """
+    Processando os elementos do arquivo de silhuetas para classificar a relação
+    com o vizinho de acordo com o sinal do índice de silhueta: positivo o
+    elemento está mais próximo ao cluster vizinho que a outros clusters;
+    negativo o elemento prefiria estar no cluster vizinho que no atual.
+
+    Args:
+
+    - arqIn: Caminho para arquivo de elementos gerados pelo aplicativo 'som'
+    - arqOut: Caminho para o arquivo de saída
+    """
+    def silhouetteClass(v):
+        if v < 0:
+            return 'negative'
+        else:
+            return 'positive'
+
+    processaCsv(arqIn,arqOut,
+        outHeader=['ID','classe_som','silhouette','cluster_vizinho','Relation'],
+        filterFuncs=[
+            genSkipRows([0])
+        ],
+        procFuncs=[
+            genIdentity(1),
+            genIdentity(2),
+            lambda r: [float(r[4])],
+            genIdentity(5),
+            lambda r: [silhouetteClass(float(r[4]))]
+        ])
 
 def exp01_01():
     """Processamento para o experimento 01"""
@@ -242,6 +273,15 @@ def exp01_01():
             genColorFromNtiles(5,[-0.2318, 0.0, 0.1003, 0.5156, 1.0],True),
         ],
         filterFuncs=[genSkipRows([0])])
+
+def exp01_03():
+    arestasVizinhancaDeSilhueta('data/somGridElem.csv',
+            'data/arestasSilhueta.csv')
+
+def exp01():
+    exp01_01()
+    exp01_02()
+    exp01_03()
 
 def exp01_02():
     """Denormalizando os atributos: Multiplicando o atributo normalizado pelo
@@ -379,37 +419,21 @@ def exp02_02():
         ],
         filterFuncs=[genSkipRows([0])])
 
-def exp02_03():
+def exp03():
     """
     Processando os elementos do arquivo de silhuetas para classificar a relação
     com o vizinho de acordo com o sinal do índice de silhueta: positivo o
     elemento está mais próximo ao cluster vizinho que a outros clusters;
     negativo o elemento prefiria estar no cluster vizinho que no atual.
     """
-    def silhouetteClass(v):
-        if v < 0:
-            return 'negative'
-        else:
-            return 'positive'
-
-    processaCsv('data/somTreeElem.csv','data/negativeElem.csv',
-        outHeader=['ID','classe_som','silhouette','cluster_vizinho','Relation'],
-        filterFuncs=[
-            genSkipRows([0])
-        ],
-        procFuncs=[
-            genIdentity(1),
-            genIdentity(2),
-            lambda r: [float(r[4])],
-            genIdentity(5),
-            lambda r: [silhouetteClass(float(r[4]))]
-        ])
+    arestasVizinhancaDeSilhueta('data/somElem02.csv',
+            'data/arestasSilhueta.csv')
 
 def exp02():
     exp02_01()
     exp02_02()
-    exp02_03()
 
 if __name__ == '__main__':
     exp01()
-    #exp02()
+    exp02()
+    exp03()
