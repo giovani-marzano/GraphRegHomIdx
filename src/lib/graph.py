@@ -9,12 +9,18 @@ from aggregate import NumericAggregator
 
 EDGE_RELATION_ATTR='_relation'
 
+# Tipos de equivalencia regular
+REGULAR_TOTAL='total'
+REGULAR_SOURCE='source'
+REGULAR_TARGET='target'
+REGULAR_TYPES = (REGULAR_TOTAL, REGULAR_SOURCE, REGULAR_TARGET)
+
 def _trueFunc(*argv, **argd):
     """Função que só retorna True"""
     return True
 
 def regularEquivalence(graph, preClassAttr=None, edgeClassAttr=None,
-    ctrlFunc=_trueFunc):
+    regularType=REGULAR_TOTAL, ctrlFunc=_trueFunc):
     """Cria um mapeamento dos nodos do grafo a uma classe de equivalência
     regular.
 
@@ -25,6 +31,10 @@ def regularEquivalence(graph, preClassAttr=None, edgeClassAttr=None,
               inicial.
         - [edgeClassAttr]: Atributo de aresta que indica a classe da aresta. Se
               'None', a relação da aresta será utilizada.
+        - [regularType]: Tipo de equivalência regular a ser obtida:
+            - REGULAR_TOTAL: Regularidade total
+            - REGULAR_SOURCE: Regularidade parcial por origem das arestas
+            - REGULAR_TARGET: Regularidade parcial por destino das arestas
         - [ctrlFunc]: Função que permite o acompanhamento e a interrupção
               prematura do algoritmo.
 
@@ -47,12 +57,21 @@ def regularEquivalence(graph, preClassAttr=None, edgeClassAttr=None,
         pertence.
     """
 
+    # Determinando como obter a relação da aresta
     if edgeClassAttr is None:
         def edgeRel(src,tgt,rel):
             return rel
     else:
         def edgeRel(src,tgt,rel):
             return graph.getEdgeAttr((src, tgt, rel), edgeClassAttr)
+
+    # Determinando se vai levar em conta arestas de saída e de entrada
+    ignoreIn = False
+    ignoreOut = False
+    if regularType == REGULAR_SOURCE:
+        ignoreIn = True
+    elif regularType == REGULAR_TARGET:
+        ignoreOut = True
 
     # Lista de tuplas (n, node) onde n é um numero único associado ao nodo.
     # Iremos processar os nodos em sequência numérica e atribuiremos as
@@ -111,7 +130,8 @@ def regularEquivalence(graph, preClassAttr=None, edgeClassAttr=None,
                 classesInN2 = {(classesAnt[v], edgeRel(v,n2,r)) for v, r in graph.inNeighboors(n2)}
                 classesOutN2 = {(classesAnt[v], edgeRel(n2,v,r)) for v, r in graph.outNeighboors(n2)}
 
-                if classesInN1 == classesInN2 and classesOutN1 == classesOutN2:
+                if ((ignoreIn or classesInN1 == classesInN2)
+                        and ( ignoreOut or classesOutN1 == classesOutN2)):
                     classesNow[n2] = classesNow[n1]
                     if classesNow[n2] != classesAnt[n2]:
                         changed = True
@@ -506,7 +526,8 @@ class MultiGraph(object):
                 self.setElemAttr(scope, elem, spec.name, v)
 
     def classifyNodesRegularEquivalence(self, classAttr='class',
-            preClassAttr=None, edgeClassAttr=None, ctrlFunc=_trueFunc):
+            preClassAttr=None, edgeClassAttr=None,
+            regularType=REGULAR_TOTAL, ctrlFunc=_trueFunc):
         """Cria um atributo de nodos que os particiona em classes de
         equivalência de uma equivalência regular.
 
@@ -514,8 +535,9 @@ class MultiGraph(object):
         equivalência a que o nodo foi atribuído.
         """
 
-        classes = regularEquivalence(self, preClassAttr, edgeClassAttr,
-                ctrlFunc)
+        classes = regularEquivalence(self, preClassAttr=preClassAttr,
+                edgeClassAttr=edgeClassAttr, regularType=regularType,
+                ctrlFunc=ctrlFunc)
         spec = AttrSpec(classAttr,'int')
         self.addNodeAttrSpec(spec)
         self.setNodeAttrFromDict(classAttr, classes)

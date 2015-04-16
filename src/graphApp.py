@@ -515,8 +515,9 @@ class GraphAppControl(object):
         self._callChangeHandlers(gmod)
 
     def classifyByRegularEquivalence(self, graphName, classAttr,
-            preClassAttr=None, edgeClassAttr=None, maxIterations=0,
-            classForEveryIteration=False):
+            preClassAttr=None, edgeClassAttr=None,
+            regularType=gr.REGULAR_TOTAL,
+            maxIterations=0, classForEveryIteration=False):
 
         if graphName not in self.graphModels.keys():
             raise KeyError(
@@ -537,6 +538,10 @@ class GraphAppControl(object):
         if edgeClassAttr is not None:
             if edgeClassAttr not in gmod.graph.getEdgeAttrNames():
                 raise KeyError("Atributo de aresta '{0}' não existe".format(edgeClassAttr))
+
+        if regularType not in gr.REGULAR_TYPES:
+            raise ValueError(
+                "Tipo de regularidade inválido: {0}".format(regularType))
 
         classesGraph = gr.MultiGraph()
 
@@ -562,7 +567,8 @@ class GraphAppControl(object):
             return keepGoing
 
         gr.regularEquivalence(gmod.graph, preClassAttr=preClassAttr,
-            edgeClassAttr=edgeClassAttr, ctrlFunc=procIteration)
+            edgeClassAttr=edgeClassAttr, regularType=regularType,
+            ctrlFunc=procIteration)
 
         classesGraph.writeGraphml(gmod.name+'_regClassesParents')
 
@@ -639,7 +645,7 @@ class GraphAppControl(object):
             changed = True
 
         for attr in edgeAttrs:
-            gmod.graph.createAggregatorFromAttribute(gr.MultiGraph.SCOPE_NODE,
+            gmod.graph.createAggregatorFromAttribute(gr.MultiGraph.SCOPE_EDGE,
                     attr)
             changed = True
 
@@ -648,32 +654,96 @@ class GraphAppControl(object):
 
 def evaluateRegularIndex(newG, regIdxPrefix, logger):
 
-    def calcRegIdx1(n0, d0, ns, ds, nt, dt, ec, scope):
+    # calcRegIdx_xxx
+    # Funções auxiliares para o cálculo dos índices de regularidade dos nodos e
+    # do grafo como um todo.
+    #
+    # Estas funções serão chamadas durante o processamento de cada aresta.
+    #
+    # Os arqumentos das funções são:
+    #   - n0: valor atual do numerador do índice
+    #   - d0: valor atual do denominador do índice
+    #   - ns: Numerador do nodo de origem da aresta = contagem de quantos nodos
+    #       do grafo original são origem de arestas mapeadas na aresta atual
+    #   - ds: Denominador do nodo de origem = contagem de nodos do grafo
+    #       original mapeados no nodo de origem
+    #   - nt: Numerador do nodo de destino da aresta = contagem de quantos nodos
+    #       do grafo original são destino de arestas mapeadas na aresta atual
+    #   - dt: Denominador do nodo de destino = contagem de nodos do grafo
+    #       original mapeados no nodo de destino
+    #   - ec: Contagem de arestas do grafo original mapeadas na aresta atual
+    #   - scope:
+    #       - src: A função deve atualizar os dados para o nodo de origem da
+    #           aresta atual.
+    #       - tgt: A função deve atualizar os dados para o nodo de destino da
+    #           aresta atual.
+    #       - graph: A função deve atualizar os dados para o grafo como um todo.
+    #
+    # As funções devem retornar o numerador e o denominador atualizados.
+    #
+
+    def calcRegIdx_src(n0, d0, ns, ds, nt, dt, ec, scope):
+        """Atualiza o numerador e denominador para o calculo do indice de
+        regularidade parcial de origem: só considera os nodos de origem das
+        arestas.
+        """
         if scope == 'src':
-            return n0 + ns, d0 + ds
+            return n0 + ec*ns, d0 + ec*ds
         elif scope == 'tgt':
-            return n0 + nt, d0 + dt
+            return n0, d0
         elif scope == 'graph':
-            return n0 + ns + nt, d0 + ds + dt
+            return n0 + ec*ns, d0 + ec*ds
         else:
             raise ValueError('Invalid scope "{0}"'.format(scope))
 
-    def calcRegIdx2(n0, d0, ns, ds, nt, dt, ec, scope):
+    def calcRegIdx_tgt(n0, d0, ns, ds, nt, dt, ec, scope):
+        """Atualiza o numerador e denominador para o calculo do indice de
+        regularidade parcial de destino: só considera os nodos de destino das
+        arestas.
+        """
+        if scope == 'src':
+            return n0, d0
+        elif scope == 'tgt':
+            return n0 + ec*nt, d0 + ec*dt
+        elif scope == 'graph':
+            return n0 + ec*nt, d0 + ec*dt
+        else:
+            raise ValueError('Invalid scope "{0}"'.format(scope))
+
+    def calcRegIdx_node(n0, d0, ns, ds, nt, dt, ec, scope):
+        """Atualiza o numerador e denominador para o calculo do indice de
+        regularidade de nodos: só considera a extremidade da aresta
+        (origem ou destino) que toca o nodo.
+        """
         if scope == 'src':
             return n0 + ec*ns, d0 + ec*ds
         elif scope == 'tgt':
             return n0 + ec*nt, d0 + ec*dt
         elif scope == 'graph':
-            return n0 + ec*(ns + nt), d0 + ec*(ds + dt)
+            return n0 + ec*(ns+nt), d0 + ec*(ds +dt)
         else:
             raise ValueError('Invalid scope "{0}"'.format(scope))
 
-    def calcRegIdx3(n0, d0, ns, ds, nt, dt, ec, scope):
-            return n0 + ec*(ns + nt), d0 + ec*(ds + dt)
+    def calcRegIdx_edges(n0, d0, ns, ds, nt, dt, ec, scope):
+        """Atualiza o numerador e denominador para o calculo do indice de
+        regularidade considerando a aresta inteira: O índice de um nodo será o
+        índice médio das arestas do qual participa não importando se como origem
+        ou destino.
+        """
+        return n0 + ec*(ns+nt), d0 + ec*(ds +dt)
 
-    calcRegVet = [calcRegIdx1, calcRegIdx2, calcRegIdx3]
+    vetCalcRegIdxGraph = [(regIdxPrefix+'_src',calcRegIdx_src),
+        (regIdxPrefix+'_tgt',calcRegIdx_tgt),
+        (regIdxPrefix,calcRegIdx_edges)]
 
-    graphTotals = [(0,0) for f in calcRegVet]
+    graphTotals = [(0,0) for f in vetCalcRegIdxGraph]
+
+    vetCalcRegIdxNode = [
+        (regIdxPrefix+'_src', calcRegIdx_src),
+        (regIdxPrefix+'_tgt', calcRegIdx_tgt),
+        (regIdxPrefix+'_node', calcRegIdx_node),
+        (regIdxPrefix, calcRegIdx_edges)
+    ]
 
     nodeTotals = {}
 
@@ -696,37 +766,36 @@ def evaluateRegularIndex(newG, regIdxPrefix, logger):
         newG.setEdgeAttr(edge, attrs['edgeTgt'], (nt)/(dt))
         newG.setEdgeAttr(edge, attrs['edgeSrc'], (ns)/(ds))
 
-        for i, calcf in enumerate(calcRegVet):
+        for i, (_, calcf) in enumerate(vetCalcRegIdxGraph):
             n0, d0 = graphTotals[i]
             graphTotals[i] = calcf(n0, d0, ns, ds, nt, dt, ec, 'graph')
 
-        nodeNDs = nodeTotals.setdefault(src,[(0,0) for f in calcRegVet])
-        for i, calcf in enumerate(calcRegVet):
+        nodeNDs = nodeTotals.setdefault(src,[(0,0) for f in vetCalcRegIdxNode])
+        for i, (_, calcf) in enumerate(vetCalcRegIdxNode):
             n0, d0 = nodeNDs[i]
             nodeNDs[i] = calcf(n0, d0, ns, ds, nt, dt, ec, 'src')
 
-        nodeNDs = nodeTotals.setdefault(tgt,[(0,0) for f in calcRegVet])
-        for i, calcf in enumerate(calcRegVet):
+        nodeNDs = nodeTotals.setdefault(tgt,[(0,0) for f in vetCalcRegIdxNode])
+        for i, (_, calcf) in enumerate(vetCalcRegIdxNode):
             n0, d0 = nodeNDs[i]
             nodeNDs[i] = calcf(n0, d0, ns, ds, nt, dt, ec, 'tgt')
 
     for i, ND in enumerate(graphTotals):
         n, d = ND
-        attrName = regIdxPrefix+str(i)
+        attrName = vetCalcRegIdxGraph[i][0]
         spec = gr.AttrSpec(attrName, float, 0)
         newG.addGraphAttrSpec(spec)
         newG.setGraphAttr(attrName, n/d)
 
-    for i, calcf in enumerate(calcRegVet):
-        attrName = regIdxPrefix+str(i)
+    for attrName, _ in vetCalcRegIdxNode:
         spec = gr.AttrSpec(attrName, float, 0)
         newG.addNodeAttrSpec(spec)
 
     for node in newG.nodes():
-        nodeNDs = nodeTotals.get(node,[(0,0) for f in calcRegVet])
+        nodeNDs = nodeTotals.get(node,[(0,0) for f in vetCalcRegIdxNode])
 
         for i, ND in enumerate(nodeNDs):
-            attrName = regIdxPrefix+str(i)
+            attrName = vetCalcRegIdxNode[i][0]
             n, d = ND
             if d > 0:
                 newG.setNodeAttr(node, attrName, n/d)
@@ -1799,6 +1868,8 @@ class ClassifyRegularEquivDialog(Dialog):
         self.maxIterations.set(0)
         self.classForEveryIteration = tk.BooleanVar()
         self.classForEveryIteration.set(True)
+        self.regularTypeStr = tk.StringVar()
+        self.regularTypeStr.set(gr.REGULAR_TOTAL)
 
         if selectedGraph:
             self._setGraphName(selectedGraph)
@@ -1856,6 +1927,12 @@ class ClassifyRegularEquivDialog(Dialog):
         row = gridLabelAndWidgets(row, labelwidth, lb, entry, btn)
 
         self.edgeClassButton = btn
+
+        lb = ttk.Label(master, text='Tipo de regularidade:', justify=tk.RIGHT,
+                anchor=tk.E)
+        optionM = tk.OptionMenu(master, self.regularTypeStr,
+                *gr.REGULAR_TYPES)
+        row = gridLabelAndWidgets(row, labelwidth, lb, optionM)
 
         lb = ttk.Label(master,
             text='Número máximo de iterações\n(zero para sem limite):',
@@ -1971,6 +2048,7 @@ class ClassifyRegularEquivDialog(Dialog):
         graphName = self.graphName.get()
         maxIterations = self.maxIterations.get()
         classForEveryIteration = self.classForEveryIteration.get()
+        regularType = self.regularTypeStr.get()
 
         def execute():
             self.control.classifyByRegularEquivalence(
@@ -1978,6 +2056,7 @@ class ClassifyRegularEquivDialog(Dialog):
                 classAttr=classAttr,
                 preClassAttr=self.preClassAttr,
                 edgeClassAttr=self.edgeClassAttr,
+                regularType=regularType,
                 maxIterations=maxIterations,
                 classForEveryIteration=classForEveryIteration)
 
