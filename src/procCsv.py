@@ -433,7 +433,27 @@ def exp02():
     exp02_01()
     exp02_02()
 
+def exp05():
+    """Processando o arquivo do facebook para filtar os auto loops e considerar
+    todas os tipos de interação como um só.
+    """
+
+    processaCsv('data/face2014-08.csv', 'data/noLoops2014-08.csv',
+        outHeader=['src','tgt','relation','weight','const'],
+        procFuncs=[
+            genIdentity(0),
+            genIdentity(1),
+            genIdentity(2),
+            genIdentity(3),
+            lambda *a: [1],
+        ],
+        filterFuncs=[
+            genSkipRows([0]),
+            lambda rn, row: row[0] != row[1]
+        ])
+
 if __name__ == '__main__':
-    exp01()
-    exp02()
-    exp03()
+    #exp01()
+    #exp02()
+    #exp03()
+    exp05()
