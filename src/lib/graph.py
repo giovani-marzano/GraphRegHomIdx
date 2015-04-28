@@ -83,12 +83,19 @@ def regularEquivalence(graph, preClassAttr=None, edgeClassAttr=None,
         # Todos os nodos começam na classe de equivalência do primeiro nodo.
         classesAnt = {node:nodes[0][0] for _, node in nodes}
     else:
+        # Dicionário que mapeia o valor do atributo de pre classificação para o
+        # número do primeiro nodo que possui este valor de atributo. Isto é
+        # feito pois o algoritmo utiliza os números dos nodos como
+        # identificadores das classes geradas.
         attrClassNum = {}
         classesAnt = {}
         for num, node in nodes:
             attr = graph.getNodeAttr(node, preClassAttr)
             nodeClass = attrClassNum.setdefault(attr, num)
             classesAnt[node] = nodeClass
+
+        # o mapeamento de atributos em classes não é mais necessário
+        del attrClassNum
 
     classesNow = {node:None for _, node in nodes}
     changed = True
