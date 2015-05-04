@@ -206,13 +206,63 @@ def fullMorphismStats(g, nodeClassF, edgeClassF):
 
     return nodeHits, edgeHits, edgeSrcHits, edgeTgtHits
 
+def calcEdgeRegIdx(nodeHits, edgeHits, edgeSrcHits, edgeTgtHits):
+    edgeIdx = {}
+
+    for edge, ec in edgeHits.items():
+        ds = nodeHits[edge[0]]
+        dt = nodeHits[edge[1]]
+        ns = edgeSrcHits[edge]
+        nt = edgeTgtHits[edge]
+
+        edgeIdx[edge] = (ns + nt)/(ds + dt)
+
+    return edgeIdx
+
+def calcNodeRegIdx(nodeHits, edgeHits, edgeSrcHits, edgeTgtHits):
+    nodeSumEC = {}
+    nodeSumN = {}
+
+    for edge, ec in edgeHits.items():
+        ns = edgeSrcHits[edge]
+        nt = edgeTgtHits[edge]
+
+        s = nodeSumEC.get(edge[0],0)
+        s += ec
+        nodeSumEC[edge[0]] = s
+
+        s = nodeSumEC.get(edge[1],0)
+        s += ec
+        nodeSumEC[edge[1]] = s
+
+        s = nodeSumN.get(edge[0],0)
+        s += ec*ns
+        nodeSumN[edge[0]] = s
+
+        s = nodeSumN.get(edge[1],0)
+        s += ec*nt
+        nodeSumN[edge[1]] = s
+
+    nodeRegIdx = {}
+    for node, d in nodeHits.items():
+        ec = nodeSumEC.get(node, 0)
+        n = nodeSumN.get(node,0)
+
+        if ec > 0:
+            # O nodo tem aresta incidente
+            nodeRegIdx[node] = n/(d*ec)
+        else:
+            nodeRegIdx[node] = 1.0
+
+    return nodeRegIdx
+
 def calcGraphRegIdx(nodeHits, edgeHits, edgeSrcHits, edgeTgtHits):
     """Calcula o índice de regularidade de grafo para as estatísticas de
     homomorfismo cheio fornecidas.
     """
 
-    sumN = 0.0
-    sumD = 0.0
+    edgeSumN = 0.0
+    edgeSumD = 0.0
 
     for edge in edgeHits.keys():
         ec = edgeHits[edge]
@@ -223,13 +273,14 @@ def calcGraphRegIdx(nodeHits, edgeHits, edgeSrcHits, edgeTgtHits):
         ds = nodeHits[edge[0]]
         dt = nodeHits[edge[1]]
 
-        sumN += ec*(ns+nt)
-        sumD += ec*(ds+dt)
+        edgeSumN += ec*(ns+nt)
+        edgeSumD += ec*(ds+dt)
 
-    if sumD <= 0:
+    if edgeSumD <= 0:
+        print('WARN: edgeSumD <= 0', edgeSumD)
         return 0.0
     else:
-        return sumN/sumD
+        return edgeSumN/edgeSumD
 
 class MultiGraph(object):
     SCOPE_NODE = 'node'
