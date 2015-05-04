@@ -154,6 +154,83 @@ def regularEquivalence(graph, preClassAttr=None, edgeClassAttr=None,
 
     return classesAnt
 
+def fullMorphismStats(g, nodeClassF, edgeClassF):
+    """Calcula as estatísticas do homomorfismo de grafo cheio induzido pelo
+    grafo 'g' e as funções de mapeamento de nodos e arestas em classes de nodos
+    e arestas respectivamente.
+
+    Args:
+
+    - g: Grafo domínio do homomorfismo
+    - nodeClassF: Função que mapeia cada nodo do grafo em uma classe de nodos.
+    - edgeClassF: Função que mapeia cada aresta do grafo em uma classe de
+      aresta.
+
+    Ret:
+
+    - nodeHits: Dicionário que mapeia cada classe de nodos na imagem do
+      homomorfismo à quantidade de nodos mapeadas nela.
+    - edgeHits: Dicionário em que as chaves são as tuplas que representam as
+      arestas geradas pelo homomorfismo e os valores são o número de arestas do
+      grafo domínio mapeadas em cada aresta gerada.
+    - edgeSrcHits: Dicionário que mapeia cada aresta criada pelo homomorfismo no
+      número de nodos do grafo domínio que se mapeia em sua origem.
+    - edgeTgtHits: Dicionário que mapeia cada aresta criada pelo homomorfismo no
+      número de nodos do grafo domínio que se mapeia em seu destino.
+    """
+
+    nodeHits = {}
+    edgeHits = {}
+    edgeSrcSets = defaultdict(set)
+    edgeTgtSets = defaultdict(set)
+
+    for node in g.nodes():
+        newNode = nodeClassF(node)
+        hits = nodeHits.get(newNode,0)
+        hits += 1
+        nodeHits[newNode] = hits
+
+    for edge in g.edges():
+        src, tgt, rel = edge
+        newEdge = (nodeClassF(src), nodeClassF(tgt), edgeClassF(edge))
+
+        hits = edgeHits.get(newEdge,0)
+        hits += 1
+        edgeHits[newEdge] = hits
+
+        edgeSrcSets[newEdge].add(src)
+        edgeTgtSets[newEdge].add(tgt)
+
+    edgeSrcHits = {e:len(s) for e,s in edgeSrcSets.items()}
+    edgeTgtHits = {e:len(s) for e,s in edgeTgtSets.items()}
+
+    return nodeHits, edgeHits, edgeSrcHits, edgeTgtHits
+
+def calcGraphRegIdx(nodeHits, edgeHits, edgeSrcHits, edgeTgtHits):
+    """Calcula o índice de regularidade de grafo para as estatísticas de
+    homomorfismo cheio fornecidas.
+    """
+
+    sumN = 0.0
+    sumD = 0.0
+
+    for edge in edgeHits.keys():
+        ec = edgeHits[edge]
+        ns = edgeSrcHits[edge]
+        nt = edgeTgtHits[edge]
+
+        # edge = (src, tgt, rel)
+        ds = nodeHits[edge[0]]
+        dt = nodeHits[edge[1]]
+
+        sumN += ec*(ns+nt)
+        sumD += ec*(ds+dt)
+
+    if sumD <= 0:
+        return 0.0
+    else:
+        return sumN/sumD
+
 class MultiGraph(object):
     SCOPE_NODE = 'node'
     SCOPE_EDGE = 'edge'
@@ -621,10 +698,8 @@ class MultiGraph(object):
             newGraph.addAggregator(self.SCOPE_EDGE, name)
 
         # Estatísticas de regularidade
-        nodeHits = {}
-        edgeSrcSets = {}
-        edgeTgtSets = {}
-        edgeHits = {}
+        nodeHits, edgeHits, edgeSrcHits, edgeTgtHits = fullMorphismStats(self,
+                nodeClass, edgeClass)
 
         for node in self.nodes():
             newNode = nodeClass(node)
@@ -636,10 +711,6 @@ class MultiGraph(object):
                         aggr)
                 vnew += v
 
-            hits = nodeHits.get(newNode,0)
-            hits += 1
-            nodeHits[newNode] = hits
-
         for edge in self.edges():
             src, tgt, rel = edge
             newEdge = (nodeClass(src), nodeClass(tgt), edgeClass(edge))
@@ -650,18 +721,6 @@ class MultiGraph(object):
                 vnew = newGraph.getElemAggregator(self.SCOPE_EDGE, newEdge,
                         aggr)
                 vnew += v
-
-            hits = edgeHits.get(newEdge,0)
-            hits += 1
-            edgeHits[newEdge] = hits
-
-            s = edgeSrcSets.setdefault(newEdge, set())
-            s.add(src)
-            s = edgeTgtSets.setdefault(newEdge, set())
-            s.add(tgt)
-
-        edgeSrcHits = {e: len(s) for e, s in edgeSrcSets.items()}
-        edgeTgtHits = {e: len(s) for e, s in edgeTgtSets.items()}
 
         if nodeClassAttr is not None:
             spec = self.getNodeAttrSpec(nodeClassAttr)
