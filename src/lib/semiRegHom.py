@@ -1,67 +1,8 @@
-#!/usr/bin/python3
 # coding: utf-8
-"""Script para testar uma forma de conseguir um homomorfismo cheio com um número
-determinado de vértices no contradomínio que seja o mais regular possível.
+"""Implementação de algoritmo que encontra uma classificação de vértices com um
+número de classes fornecido que induz um homomorfismo cheio que seja
+aproximadamente regular.
 """
-
-import os.path
-import sys
-import logging
-import logging.config
-import csv
-
-# Acrescentando o diretorio lib ao path. Lembrando que sys.path[0] representa o
-# diretório onde este script se encontra
-sys.path.append(os.path.join(sys.path[0],'lib'))
-
-#---------------------------------------------------------------------
-# Variaveis globais de configuração
-#---------------------------------------------------------------------
-
-# Configurações para controlar a geração de log pelo script
-ARQ_LOG = 'semiRegHom.log'
-LOG_CONFIG = {
-    'version': 1,
-    'formatters': {
-        'brief': {
-            'format': '%(message)s'
-        },
-        'detail': {
-            'format': '%(asctime)s|%(levelname)s:%(message)s'
-        }
-    },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'level': 'INFO',
-            'formatter': 'brief'
-        },
-        'arquivo': {
-            'class': 'logging.FileHandler',
-            'level': 'DEBUG',
-            'formatter': 'detail',
-            'filename': ARQ_LOG,
-            'mode': 'w'
-        }
-    },
-    'root': {
-        'handlers': ['console', 'arquivo'],
-        'level': 'DEBUG'
-    }
-}
-
-# Configurações de formato do csv de saída
-CSV_OUT_CONFIG = {
-    'delimiter': '\t',
-    'lineterminator': '\n',
-    'quotechar': '"',
-    'escapechar': '\\',
-    'doublequote': False,
-    'quoting': csv.QUOTE_NONNUMERIC,
-    'skipinitialspace': True
-}
-CSV_OUT_DIALECT='appcsvdialect'
-
 #---------------------------------------------------------------------
 # Importações
 #---------------------------------------------------------------------
@@ -78,10 +19,6 @@ import itertools
 IN = 0
 OUT = 1
 
-def noop(*args, **kargs):
-    """Faz nada"""
-    pass
-
 def normalizeVet(vet):
     """Normaliza o vetor fornecido, aterando-o.
     """
@@ -94,6 +31,23 @@ def normalizeVet(vet):
     return vet
 
 class KSemiRegClassVisitor(object):
+    """Implementação de um visitante para o algoritmo ksemiRegularClass.
+
+    Funcionalidades:
+
+    - Loga o progresso do algoritmo através do logger (modulo logging)
+      fornecido.
+    - Mantém a melhor classificação encontrada durante a execução.
+    - Permite a persistência da melhor classificação em arquivo se o parâmetro
+      bestClassFileName for configurado.
+    - Permite a persistência de cada classificação encontrada em arquivo se o
+      parâmetro classFileName for configurado.
+    - É um context manager, podendo ser utilizado em um bloco with. Exemplo::
+
+        with KSemiRegClassVisitor(logger, 'bestClass.csv') as visitor:
+            ksemiRegularClass(g, k, iMax, visitor)
+
+    """
     def __init__(self, logger, bestClassFileName=None, classFileName=None):
         if (bestClassFileName and classFileName
                 and bestClassFileName == classFileName):
@@ -164,16 +118,16 @@ class KSemiRegClassVisitor(object):
             for node, cls in self.bestNodeClass.items():
                 self._bestClassFile.write('{0}\t{1}\n'.format(node, cls))
 
-def createNodeClsF(nodeClass):
+def _createNodeClsF(nodeClass):
     def nodeClsF(node):
         return nodeClass[node]
 
     return nodeClsF
 
-def edgeClsF(edge):
+def _edgeClsF(edge):
     return edge[2]
 
-def actualizeClassPatterns(clsPatterns, patternToIdx, edgeRegIdx):
+def _actualizeClassPatterns(clsPatterns, patternToIdx, edgeRegIdx):
     for cls, vet in clsPatterns.items():
         for i in range(len(vet)):
             vet[i] = 0.0
@@ -192,8 +146,8 @@ def actualizeClassPatterns(clsPatterns, patternToIdx, edgeRegIdx):
     for cls, vet in clsPatterns.items():
         normalizeVet(vet)
 
-def calcEdgeAndGraphRegIdx(g, nodeClass):
-    regStats = gr.fullMorphismStats(g, createNodeClsF(nodeClass), edgeClsF)
+def _calcEdgeAndGraphRegIdx(g, nodeClass):
+    regStats = gr.fullMorphismStats(g, _createNodeClsF(nodeClass), _edgeClsF)
     edgeStats = gr.calcPreRegIdxStats(*regStats)
     edgeRegIdx = gr.calcEdgeRegIdx(edgeStats)
     graphRegIdx = gr.calcGraphRegIdx(edgeStats)
@@ -201,6 +155,30 @@ def calcEdgeAndGraphRegIdx(g, nodeClass):
     return edgeRegIdx, graphRegIdx
 
 def ksemiRegularClass(g, k, iMax, visitor):
+    """Algoritmo que encontra uma classificação com *k* classes para os vértices
+    do grafo *g* de forma que o homomorfismo induzido por esta classificação
+    seja aproximadamente regular.
+
+    Args:
+
+    - g: Grafo cujos vértices serão classificados.
+    - k: Número de classes que deverão ser geradas.
+    - iMax: Número de iterações do algoritmo a serem realizadas.
+    - visitor: Objeto visitante que possui métodos que serão chamados durante a
+      execução do algoritmo. Ver classe KSemiRegClassVisitor para exemplo de
+      implementação. Os métodos que devem existir no objeto são:
+        - begining(g, k, iMax): Chamada antes do início do loop principal do
+          algoritmo.
+        - iteration(iNum, nodeClasses, graphRegIdx, edgeRegIdx): Chamada a cada
+          iteração do algoritmo. Onde:
+            - iNum: Número da iteração corrente.
+            - nodeClasses: Dicionário com a atribuição de classes para os nodos.
+            - graphRegIdx: tupla GraphRegIdx com os índices de regularidade de
+              grafo induzidos pela classificação de nodos.
+            - edgeRegIdx: dicionário de tuplas EdgeRegIdx com os índices de
+              regularidade de aresta induzidos pela classificação de nodos.
+        - ending(): Chamada ao final do algoritmo.
+    """
     # Criando mapa de padrao de conexao para indice no vetor de padrao
     # Número de relações * 2 (entrada e saida) * número de classes (k)
     pattIter = list(itertools.product(g.relations,(IN,OUT),range(1,k+1)))
@@ -219,8 +197,8 @@ def ksemiRegularClass(g, k, iMax, visitor):
 
     for iNum in range(iMax):
         # Atualizando os vetores de padrao de conexão das classes
-        edgeRegIdx, graphRegIdx = calcEdgeAndGraphRegIdx(g, nodeClass)
-        actualizeClassPatterns(clsPatterns, patternToIdx, edgeRegIdx)
+        edgeRegIdx, graphRegIdx = _calcEdgeAndGraphRegIdx(g, nodeClass)
+        _actualizeClassPatterns(clsPatterns, patternToIdx, edgeRegIdx)
 
         visitor.iteration(iNum, nodeClass, graphRegIdx, clsPatterns)
 
@@ -258,22 +236,8 @@ def ksemiRegularClass(g, k, iMax, visitor):
         nodeClass = newNodeClass
 
     # Estatisticas finais
-    edgeRegIdx, graphRegIdx = calcEdgeAndGraphRegIdx(g, nodeClass)
+    edgeRegIdx, graphRegIdx = _calcEdgeAndGraphRegIdx(g, nodeClass)
     visitor.iteration(iMax, nodeClass, graphRegIdx, clsPatterns)
 
     visitor.ending()
 
-#---------------------------------------------------------------------
-# Execução do script
-#---------------------------------------------------------------------
-if __name__ == '__main__':
-    logging.config.dictConfig(LOG_CONFIG)
-    logger = logging.getLogger()
-    logging.shutdown()
-
-    g = gr.loadGraphml('teste.graphml', relationAttr='relation')
-
-    with KSemiRegClassVisitor(logger,
-            classFileName='nodeClasses.txt',
-            bestClassFileName='bestNodeClasses.csv') as visitor:
-        ksemiRegularClass(g, 10, 10, visitor)
