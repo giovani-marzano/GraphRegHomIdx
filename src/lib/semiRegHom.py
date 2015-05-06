@@ -47,6 +47,12 @@ class KSemiRegClassVisitor(object):
         with KSemiRegClassVisitor(logger, 'bestClass.csv') as visitor:
             ksemiRegularClass(g, k, iMax, visitor)
 
+    Atributos:
+
+    - bestNodeClass: Dicionário com a melhor classificação de nodos encontrada.
+      É None se o algoritmo não tiver rodado ainda.
+    - bestRegIdx: Índice de regularidade de grafo da melhor classificação.
+
     """
     def __init__(self, logger, bestClassFileName=None, classFileName=None):
         if (bestClassFileName and classFileName

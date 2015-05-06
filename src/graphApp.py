@@ -65,6 +65,7 @@ CSV_OUT_DIALECT='appcsvdialect'
 # Classes de controle
 #---------------------------------------------------------------------
 import graph as gr
+from semiRegHom import KSemiRegClassVisitor, ksemiRegularClass
 
 class GraphModel(object):
     def __init__(self, graphObj, name, filename=None):
@@ -543,20 +544,15 @@ class GraphAppControl(object):
             raise ValueError(
                 "Tipo de regularidade inválido: {0}".format(regularType))
 
-        classesGraph = gr.MultiGraph()
-
         classesVet = []
         def procIteration(i, classes, done, newClassesParents):
             self.logger.info(
                 'Regular equivalence iteration {0} - done {1}'.format(i, done))
 
-            for cNow, cAnt in newClassesParents.items():
-                classesGraph.addEdge(str(cAnt),str(cNow),'child')
-
             keepGoing = maxIterations <= 0 or i < maxIterations
 
             if classForEveryIteration:
-                # Não pegamos a última pois é igual à penúltima uma: o algoritmo
+                # Não pegamos a última pois é igual à penúltima: o algoritmo
                 # para (done = True) quando percebe que não houve alteração entre a
                 # classificação atual e a anterior.
                 if not done:
@@ -569,8 +565,6 @@ class GraphAppControl(object):
         gr.regularEquivalence(gmod.graph, preClassAttr=preClassAttr,
             edgeClassAttr=edgeClassAttr, regularType=regularType,
             ctrlFunc=procIteration)
-
-        classesGraph.writeGraphml(gmod.name+'_regClassesParents')
 
         for i, classes in classesVet:
             spec = gr.AttrSpec('{0}_{1}'.format(classAttr, i),'int')
@@ -644,6 +638,33 @@ class GraphAppControl(object):
 
         if changed:
             self._callChangeHandlers(gmod)
+
+    def classifySemiRegular(self, graphName, classAttr, numClasses,
+            numIterations, bestClassFileName=None, allClassFileName=None):
+
+        if graphName not in self.graphModels.keys():
+            raise KeyError(
+                "Grafo '{0}' não existe".format(graphName))
+
+        gmod = self.graphModels[graphName]
+
+        spec = gr.AttrSpec(classAttr, 'int')
+
+        isOk, errMsg = self.validateNewAttrs(gmod, [spec], 'node')
+        if not isOk:
+            raise KeyError("'classAttr' inválido. " + errMsg)
+
+        visitor = KSemiRegClassVisitor(self.logger,
+                bestClassFileName=bestClassFileName,
+                classFileName=allClassFileName)
+
+        with visitor as v:
+            ksemiRegularClass(gmod.graph, numClasses, numIterations, v)
+
+        gmod.graph.addNodeAttrSpec(spec)
+        gmod.graph.setNodeAttrFromDict(spec.name, v.bestNodeClass)
+
+        self._callChangeHandlers(gmod)
 
 #---------------------------------------------------------------------
 # Classes GUI
@@ -925,6 +946,8 @@ class GraphAppGUI(tk.Frame):
         m.add_separator()
         m.add_command(label='Classificar por equivalência regular...',
             command=self.menuCmdClassifyRegularEquiv)
+        m.add_command(label='Classificação aproximadamente regular...',
+            command=self.menuCmdClassifySemiRegular)
 
         m = tk.Menu(self.menuBar)
         self.menuBar.add_cascade(label='Arestas', menu=m)
@@ -1053,6 +1076,13 @@ class GraphAppGUI(tk.Frame):
         if gsel is not None:
             gsel = gsel.name
         d = ClassifyRegularEquivDialog(self, self.control, gsel)
+        self.consumeQueue()
+
+    def menuCmdClassifySemiRegular(self):
+        gsel = self.getSelectedGraph()
+        if gsel is not None:
+            gsel = gsel.name
+        d = ClassifySemiRegularDialog(self, self.control, gsel)
         self.consumeQueue()
 
     def menuCmdFullHomomorphism(self):
@@ -1519,7 +1549,7 @@ class ExportAttributesDialog(Dialog):
     def _doBtnChooseGraph(self):
         graphs = self.control.getGraphNames()
         dialog = gui.ListSelectionDialog(self, title='Escolha de grafo',
-            text='Escolha o grafo que cujos atributos serão exportados',
+            text='Escolha o grafo cujos atributos serão exportados',
             items=graphs, selected=self.graphName.get())
 
         if dialog.result:
@@ -1789,7 +1819,7 @@ class ClassifyRegularEquivDialog(Dialog):
     def _doBtnChooseGraph(self):
         graphs = self.control.getGraphNames()
         dialog = gui.ListSelectionDialog(self, title='Escolha de grafo',
-            text='Escolha o grafo que cujos atributos serão exportados',
+            text='Escolha o grafo que cujos nodos serão classificados.',
             items=graphs, selected=self.graphName.get())
 
         if dialog.result:
@@ -1892,6 +1922,119 @@ class ClassifyRegularEquivDialog(Dialog):
                 regularType=regularType,
                 maxIterations=maxIterations,
                 classForEveryIteration=classForEveryIteration)
+
+        gui.ExecutionDialog(master=self.master, command=execute,
+                logger=self.control.logger)
+
+class ClassifySemiRegularDialog(Dialog):
+    def __init__(self, master, control, selectedGraph=''):
+
+        self.master = master
+        self.control = control
+
+        self.graphName = tk.StringVar()
+        self.classAttr = tk.StringVar()
+        self.numClasses = tk.IntVar()
+        self.numClasses.set(5)
+        self.numIterations = tk.IntVar()
+        self.numIterations.set(10)
+
+        if selectedGraph:
+            self._setGraphName(selectedGraph)
+
+        super().__init__(master, 'Classificação aproximadamente regular')
+
+    def _setGraphName(self, graphName):
+        self.graphName.set(graphName)
+
+    def body(self, master):
+        master.columnconfigure(1, weight=1)
+        labelwidth = 25
+        row = 0
+
+        lb = ttk.Label(master, text='Grafo:', justify=tk.RIGHT, anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.graphName, state='readonly')
+        btn = ttk.Button(master, text='Escolher...',
+                command=self._doBtnChooseGraph)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry, btn)
+
+        lb = ttk.Label(master, text='Atributo para a classe gerada:',
+                justify=tk.RIGHT, anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.classAttr)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry)
+
+        lb = ttk.Label(master,
+            text='Número de classes:',
+            justify=tk.RIGHT, anchor=tk.E)
+        spin = tk.Spinbox(master, textvariable=self.numClasses,
+                from_=2, to=100, increment=1)
+        row = gridLabelAndWidgets(row, labelwidth, lb, spin)
+
+        lb = ttk.Label(master,
+            text='Número de iterações:',
+            justify=tk.RIGHT, anchor=tk.E)
+        spin = tk.Spinbox(master, textvariable=self.numIterations,
+                from_=1, to=100, increment=1)
+        row = gridLabelAndWidgets(row, labelwidth, lb, spin)
+
+        self._updateButtonStates()
+
+        master.pack(fill='both', expand=True)
+
+    def _doBtnChooseGraph(self):
+        graphs = self.control.getGraphNames()
+        dialog = gui.ListSelectionDialog(self, title='Escolha de grafo',
+            text='Escolha o grafo cujos nodos serão classificados.',
+            items=graphs, selected=self.graphName.get())
+
+        if dialog.result:
+            for i, sel in dialog.result:
+                self._setGraphName(sel)
+                self._updateButtonStates()
+                break
+
+    def _updateButtonStates(self):
+        btnState = tk.DISABLED
+        if self.graphName.get().strip():
+            btnState = tk.NORMAL
+
+    def validate(self):
+        isOk = True
+        errMsg = ''
+
+        if not self.graphName.get():
+            errMsg = 'O grafo não foi escolhido!'
+            isOk = False
+
+        className = self.classAttr.get().strip()
+
+        if isOk and not className:
+            isOk = False
+            errMsg = 'O nome do atributo de classe a ser criado não foi configurado!'
+
+        if isOk:
+            spec = gr.AttrSpec(className, 'int')
+            isOk, errMsg = self.control.validateNewAttrs(self.graphName.get(),
+            [spec], 'node')
+
+        if not isOk:
+            tk.messagebox.showwarning('Problema na configuração',
+                errMsg)
+
+        return isOk
+
+    def apply(self):
+        classAttr = self.classAttr.get().strip()
+        graphName = self.graphName.get()
+        numClasses = self.numClasses.get()
+        numIterations = self.numIterations.get()
+
+        def execute():
+            self.control.classifySemiRegular(
+                graphName=graphName,
+                classAttr=classAttr,
+                numClasses=numClasses,
+                numIterations=numIterations)
 
         gui.ExecutionDialog(master=self.master, command=execute,
                 logger=self.control.logger)
