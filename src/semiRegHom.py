@@ -94,36 +94,75 @@ def normalizeVet(vet):
     return vet
 
 class KSemiRegClassVisitor(object):
-    def __init__(self, logger, classFileName=None):
+    def __init__(self, logger, bestClassFileName=None, classFileName=None):
+        if (bestClassFileName and classFileName
+                and bestClassFileName == classFileName):
+            bestClassFileName = 'best_' + bestClassFileName
+
         self.logger = logger
-        if classFileName:
-            self.classFile = open(classFileName, 'w')
-        else:
-            self.classFile = None
+        self.classFileName = classFileName
+        self.bestClassFileName = bestClassFileName
+        self._classFile = None
+        self._bestClassFile = None
+
+        self.bestRegIdx = 0.0
+        self.bestNodeClass = {}
+
+    def begining(self, g, k, iMax):
+        self.logger.info(
+            "BEGIN ksemiRegularClass: {0} classes {1} iterations".format(
+                k, iMax))
+
+    def iteration(self, i, nodeClass, graphRegIdx, clsPatterns):
+        self.logger.info("Iter {0} {1:.4f} {2:.4f} {3:.4f}".format(i,
+                    graphRegIdx.ri, graphRegIdx.sri, graphRegIdx.tri))
+        self._writeClasses(i, nodeClass)
+
+        if graphRegIdx.ri >= self.bestRegIdx:
+            self.bestRegIdx = graphRegIdx.ri
+            self.bestNodeClass = nodeClass
+
+    def ending(self):
+        self.logger.info(
+            'END ksemiRegularClass: best {0:.4f}'.format(self.bestRegIdx))
+        self._writeBestClasses()
 
     def __enter__(self):
         """Context manager enter function.
         """
+        self.openFiles()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
+        self.closeFiles()
         return False
 
-    def close(self):
-        if self.classFile:
-            self.classFile.close()
-            self.classFile = None
+    def openFiles(self):
+        self.closeFiles()
+        if self.classFileName:
+            self._classFile = open(self.classFileName, 'w')
+        if self.bestClassFileName:
+            self._bestClassFile = open(self.bestClassFileName, 'w')
 
-    def iteration(self, i, nodeClass, graphRegIdx, clsPatterns):
-        self.logger.info("Iter {0} {1}".format(i, graphRegIdx))
-        self._writeClasses(i, nodeClass)
+    def closeFiles(self):
+        if self._classFile:
+            self._classFile.close()
+            self._classFile = None
+        if self._bestClassFile:
+            self._bestClassFile.close()
+            self._bestClassFile = None
 
     def _writeClasses(self, i, nodeClass):
-        if self.classFile:
-            self.classFile.write('\n# ---- Iteration {0} ----\n\n'.format(i))
+        if self._classFile:
+            self._classFile.write('\n# ---- Iteration {0} ----\n\n'.format(i))
             for node, cls in nodeClass.items():
-                self.classFile.write('{0}\t{1}\n'.format(node, cls))
+                self._classFile.write('{0}\t{1}\n'.format(node, cls))
+
+    def _writeBestClasses(self):
+        if self._bestClassFile:
+            self._bestClassFile.write('node\tclass\n')
+            for node, cls in self.bestNodeClass.items():
+                self._bestClassFile.write('{0}\t{1}\n'.format(node, cls))
 
 def createNodeClsF(nodeClass):
     def nodeClsF(node):
@@ -143,15 +182,23 @@ def actualizeClassPatterns(clsPatterns, patternToIdx, edgeRegIdx):
         # Padrao da classe origem para a de destino
         pat = (rel, OUT, tgt)
         idx = patternToIdx[pat]
-        clsPatterns[src][idx] = regIdx
+        clsPatterns[src][idx] = regIdx.sri
 
         # Padrao da classe destino em relação à de origem
         pat = (rel, IN, src)
         idx = patternToIdx[pat]
-        clsPatterns[tgt][idx] = regIdx
+        clsPatterns[tgt][idx] = regIdx.tri
 
     for cls, vet in clsPatterns.items():
         normalizeVet(vet)
+
+def calcEdgeAndGraphRegIdx(g, nodeClass):
+    regStats = gr.fullMorphismStats(g, createNodeClsF(nodeClass), edgeClsF)
+    edgeStats = gr.calcPreRegIdxStats(*regStats)
+    edgeRegIdx = gr.calcEdgeRegIdx(edgeStats)
+    graphRegIdx = gr.calcGraphRegIdx(edgeStats)
+
+    return edgeRegIdx, graphRegIdx
 
 def ksemiRegularClass(g, k, iMax, visitor):
     # Criando mapa de padrao de conexao para indice no vetor de padrao
@@ -168,11 +215,11 @@ def ksemiRegularClass(g, k, iMax, visitor):
         pattVet = [0.0 for _ in patternToIdx]
         clsPatterns[cls] = pattVet
 
+    visitor.begining(g, k, iMax)
+
     for iNum in range(iMax):
         # Atualizando os vetores de padrao de conexão das classes
-        regStats = gr.fullMorphismStats(g, createNodeClsF(nodeClass), edgeClsF)
-        edgeRegIdx = gr.calcEdgeRegIdx(*regStats)
-        graphRegIdx = gr.calcGraphRegIdx(*regStats)
+        edgeRegIdx, graphRegIdx = calcEdgeAndGraphRegIdx(g, nodeClass)
         actualizeClassPatterns(clsPatterns, patternToIdx, edgeRegIdx)
 
         visitor.iteration(iNum, nodeClass, graphRegIdx, clsPatterns)
@@ -211,9 +258,10 @@ def ksemiRegularClass(g, k, iMax, visitor):
         nodeClass = newNodeClass
 
     # Estatisticas finais
-    regStats = gr.fullMorphismStats(g, createNodeClsF(nodeClass), edgeClsF)
-    graphRegIdx = gr.calcGraphRegIdx(*regStats)
+    edgeRegIdx, graphRegIdx = calcEdgeAndGraphRegIdx(g, nodeClass)
     visitor.iteration(iMax, nodeClass, graphRegIdx, clsPatterns)
+
+    visitor.ending()
 
 #---------------------------------------------------------------------
 # Execução do script
@@ -225,5 +273,7 @@ if __name__ == '__main__':
 
     g = gr.loadGraphml('teste.graphml', relationAttr='relation')
 
-    with KSemiRegClassVisitor(logger, 'nodeClasses.txt') as visitor:
-        ksemiRegularClass(g, 5, 10, visitor)
+    with KSemiRegClassVisitor(logger,
+            classFileName='nodeClasses.txt',
+            bestClassFileName='bestNodeClasses.csv') as visitor:
+        ksemiRegularClass(g, 10, 10, visitor)

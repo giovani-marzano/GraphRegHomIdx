@@ -3,7 +3,7 @@
 import os.path
 import math
 import xml.etree.ElementTree as ET
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, namedtuple
 from itertools import chain
 from aggregate import NumericAggregator
 
@@ -206,8 +206,33 @@ def fullMorphismStats(g, nodeClassF, edgeClassF):
 
     return nodeHits, edgeHits, edgeSrcHits, edgeTgtHits
 
-def calcEdgeRegIdx(nodeHits, edgeHits, edgeSrcHits, edgeTgtHits):
-    edgeIdx = {}
+PreRegIdxStats = namedtuple('PreRegIdxStats', ['ns','ds','nt','dt','ec'])
+
+def calcPreRegIdxStats(nodeHits, edgeHits, edgeSrcHits, edgeTgtHits):
+    """Calcula as estatísticas ns,ds,nt,dt e ec para cada aresta do grafo
+    contradomínio. Estas estatísticas são utilizadas para calcular os diversos
+    índices de regularidade definidos.
+
+    Estatísticas:
+
+    - ns: Número de vértices distintos do grafo domínio que contribuem como
+      origem para a aresta.
+    - ds: Número de vértices do grafo domínio mapeados na origem da aresta.
+    - nt: Número de vértices distintos do grafo domínio que contribuem como
+      destino para a aresta.
+    - dt: Número de vértices do grafo domínio mapeados no destino da aresta.
+    - ec: Número de arestas do grafo domínio mapeados na aresta.
+
+    Args:
+
+    Recebe como parâmetros as estatísticas calculadas em fullMorphismStats.
+
+    Return:
+
+    Dicionário que mapeia cada aresta do grafo imagem à tupla de estatísticas
+    (ns,ds,nt,dt,ec)
+    """
+    edgeStats = {}
 
     for edge, ec in edgeHits.items():
         ds = nodeHits[edge[0]]
@@ -215,72 +240,161 @@ def calcEdgeRegIdx(nodeHits, edgeHits, edgeSrcHits, edgeTgtHits):
         ns = edgeSrcHits[edge]
         nt = edgeTgtHits[edge]
 
-        edgeIdx[edge] = (ns + nt)/(ds + dt)
+        edgeStats[edge] = PreRegIdxStats(ns,ds,nt,dt,ec)
+
+    return edgeStats
+
+EdgeRegIxd = namedtuple('EdgeRegIxd',['ri', 'sri', 'tri'])
+
+def calcEdgeRegIdx(edgeStats):
+    """Calcula os índices de regularidade definidos para arestas.
+
+    Args:
+
+    - edgeStats: Dicionário com as estatísticas (ns,ds,nt,dt,ec) para cada
+      aresta, como calculadas pela função calcPreRegIdxStats.
+
+    Ret:
+
+    Dicionário edgeRegIdx: edgeRegIdx[edge] = (RI,SRI,TRI), onde:
+
+    -ri: Regularity Index = (ns + nt)/(ds + dt)
+    -sri: Source Regularity Index = ns/ds
+    -tri: Target Regularity Index = nt/dt
+    """
+    edgeIdx = {}
+
+    for edge, (ns,ds,nt,dt,ec) in edgeStats.items():
+        edgeIdx[edge] = EdgeRegIxd((ns+nt)/(ds+dt), ns/ds, nt/dt)
 
     return edgeIdx
 
-def calcNodeRegIdx(nodeHits, edgeHits, edgeSrcHits, edgeTgtHits):
-    nodeSumEC = {}
-    nodeSumN = {}
+NodeRegIdx = namedtuple('NodeRegIdx', ['ri','nri','sri','tri'])
 
-    for edge, ec in edgeHits.items():
-        ns = edgeSrcHits[edge]
-        nt = edgeTgtHits[edge]
+def calcNodeRegIdx(nodeHits, edgeStats):
+    """Calcula os índices de regularidade de nodo.
 
-        s = nodeSumEC.get(edge[0],0)
-        s += ec
-        nodeSumEC[edge[0]] = s
+    Args:
 
-        s = nodeSumEC.get(edge[1],0)
-        s += ec
-        nodeSumEC[edge[1]] = s
+    - nodeHits: Dicionário com a contagem de nodos do grafo domínio mapeados em
+      cada nodo do grafo imagem. Como retornado pela função fullMorphismStats.
+    - edgeStats: Dicionário com as estatísticas (ns,ds,nt,dt,ec) para cada
+      aresta, como calculadas pela função calcPreRegIdxStats.
 
-        s = nodeSumN.get(edge[0],0)
-        s += ec*ns
-        nodeSumN[edge[0]] = s
+    Ret:
 
-        s = nodeSumN.get(edge[1],0)
-        s += ec*nt
-        nodeSumN[edge[1]] = s
+    - ri: Regularity Index = Sum(ec*(ns+nt))/Sum(ec*(ds+dt))
+    - nri: Node (only) Regularity Index = (Sum(ecs*ns)+Sum(ect*nt))/d*(Sum(ecs)+Sum(ect))
+    - sri: Source Regularity Index = Sum(ecs*ns)/d*Sum(ecs)
+    - tri: Target Regularity Index = Sum(ect*nt)/d*Sum(ect)
+    """
+    sumEcS = {}
+    sumEcT = {}
+    sumNS = {}
+    sumNT = {}
+    sumEdgeN = {}
+    sumEdgeD = {}
+
+    def accumulate(d, k, v):
+        """Acumula o valor v na posição k do dicionário d"""
+        s = d.get(k,0)
+        s += v
+        d[k] = s
+
+    for edge, stats in edgeStats.items():
+        accumulate(sumEcS, edge[0], stats.ec)
+        accumulate(sumEcT, edge[1], stats.ec)
+
+        accumulate(sumNS, edge[0], stats.ec * stats.ns)
+        accumulate(sumNT, edge[1], stats.ec * stats.nt)
+
+        n = stats.ec * (stats.ns + stats.nt)
+        accumulate(sumEdgeN, edge[0], n)
+        accumulate(sumEdgeN, edge[1], n)
+
+        d = stats.ec * (stats.ds + stats.dt)
+        accumulate(sumEdgeD, edge[0], d)
+        accumulate(sumEdgeD, edge[1], d)
 
     nodeRegIdx = {}
     for node, d in nodeHits.items():
-        ec = nodeSumEC.get(node, 0)
-        n = nodeSumN.get(node,0)
+        if d <= 0:
+            # nodo não possui nada mapeado nele
+            nodeRegIdx[node] = NodeRegIdx(0.0,0.0,0.0,0.0)
+            continue
 
-        if ec > 0:
-            # O nodo tem aresta incidente
-            nodeRegIdx[node] = n/(d*ec)
+        ecs = sumEcS.get(node, 0)
+        ect = sumEcT.get(node, 0)
+        ec = ecs + ect
+
+        if ec <= 0:
+            # nodo não possui arestas
+            nodeRegIdx[node] = NodeRegIdx(1.0,1.0,1.0,1.0)
+            continue
+
+        ns = sumNS.get(node,0)
+        nt = sumNT.get(node,0)
+
+        edgeN = sumEdgeN.get(node, 0)
+        edgeD = sumEdgeD.get(node, 0)
+        assert(edgeD > 0)
+
+        ri = edgeN/edgeD
+        nri = (ns+nt)/(d*ec)
+
+        if ecs > 0:
+            sri = ns/(d*ecs)
         else:
-            nodeRegIdx[node] = 1.0
+            # nodo nao tem arestas de saida
+            sri = 1.0
+
+        if ect > 0:
+            tri = nt/(d*ect)
+        else:
+            # nodo nao tem arestas de entrada
+            tri = 1.0
+
+        nodeRegIdx[node] = NodeRegIdx(ri,nri,sri,tri)
 
     return nodeRegIdx
 
-def calcGraphRegIdx(nodeHits, edgeHits, edgeSrcHits, edgeTgtHits):
-    """Calcula o índice de regularidade de grafo para as estatísticas de
-    homomorfismo cheio fornecidas.
+GraphRegIdx = namedtuple('GraphRegIdx', ['ri','sri','tri'])
+
+def calcGraphRegIdx(edgeStats):
+    """Calcula os índices de regularidade de grafo.
+
+    Args:
+
+    - edgeStats: Dicionário com as estatísticas (ns,ds,nt,dt,ec) para cada
+      aresta, como calculadas pela função calcPreRegIdxStats.
+
+    Ret:
+
+    - ri: Regularity Index = Sum(ec*(ns+nt))/Sum(ec*(ds+dt))
+    - sri: Source Regularity Index = Sum(ec*ns)/Sum(ec*ds)
+    - tri: Target Regularity Index = Sum(ec*nt)/Sum(ec*dt)
     """
 
-    edgeSumN = 0.0
-    edgeSumD = 0.0
+    sumN = 0.0
+    sumNs = 0.0
+    sumNt = 0.0
+    sumD = 0.0
+    sumDs = 0.0
+    sumDt = 0.0
 
-    for edge in edgeHits.keys():
-        ec = edgeHits[edge]
-        ns = edgeSrcHits[edge]
-        nt = edgeTgtHits[edge]
+    for edge, (ns,ds,nt,dt,ec) in edgeStats.items():
+        sumN += ec*(ns+nt)
+        sumNs += ec*ns
+        sumNt += ec*nt
+        sumD += ec*(ds+dt)
+        sumDs += ec*ds
+        sumDt += ec*dt
 
-        # edge = (src, tgt, rel)
-        ds = nodeHits[edge[0]]
-        dt = nodeHits[edge[1]]
+    assert(sumDs > 0)
+    assert(sumDt > 0)
+    assert(sumD > 0)
 
-        edgeSumN += ec*(ns+nt)
-        edgeSumD += ec*(ds+dt)
-
-    if edgeSumD <= 0:
-        print('WARN: edgeSumD <= 0', edgeSumD)
-        return 0.0
-    else:
-        return edgeSumN/edgeSumD
+    return GraphRegIdx(sumN/sumD, sumNs/sumDs, sumNt/sumDt)
 
 class MultiGraph(object):
     SCOPE_NODE = 'node'
@@ -682,7 +796,8 @@ class MultiGraph(object):
         self.setNodeAttrFromDict(classAttr, classes)
 
     def spawnFromClassAttributes(self, nodeClassAttr=None, edgeClassAttr=None,
-            nodeClassDflt=None, edgeClassDflt=None):
+            nodeClassDflt=None, edgeClassDflt=None, regIdxPrefix=None,
+            countPrefix=None):
         """Cria um novo grafo cujos nodos são as classes de equivalência de
         nodos do grafo original e as relações das arestas são as classes de
         equivalência de arestas do grafo original de tal forma que o mapeamento
@@ -715,6 +830,33 @@ class MultiGraph(object):
             atributo 'nodeClassAttr' setado.
         :param edgeClassDflt: Classe default para arestas que não possuirem o
             atributo 'edgeClassAttr' setado.
+        :param countPrefix: Prefixo para criação de atributos de contagem de
+            nodos, arestas e nodos na origem e destino das arestas. Se None,
+            nenhum atributo de contagem será criado. Os atributos criados serão:
+            - countPrefix_node: Em cada nodo com a contagem de nodos do grafo
+              domínio mapeado nele.
+            - countPrefix_edge: Em cada aresta. Contagem das arestas do grafo
+              domínio mapeadas nela.
+            - countPrefix_src: Em cada aresta. Contagem dos nodos do grafo
+              domínio que são origens das arestas mapeadas nela.
+            - countPrefix_tgt: Em cada aresta. Contagem dos nodos do grafo
+              domínio que são destinos das arestas mapeadas nela.
+        :param regIdxPrefix: Prefixo para criação de atributos de índice de
+            regularidade em nodos arestas e grafo. Se None, nenhum atributo de
+            índice de regularidade será criado. Os atributos criados serão:
+            - Em grafo:
+                - regIdxPrefix
+                - regIdxPrefix_src
+                - regIdxPrefix_tgt
+            - Em aresta:
+                - regIdxPrefix
+                - regIdxPrefix_src
+                - regIdxPrefix_tgt
+            - Em nodos:
+                - regIdxPrefix
+                - regIdxPrefix_nodo
+                - regIdxPrefix_src
+                - regIdxPrefix_tgt
 
         :return: Grafo gerado
         """
@@ -751,10 +893,6 @@ class MultiGraph(object):
             newGraph.addAggregator(self.SCOPE_NODE, name)
         for name in edgeAggrNames:
             newGraph.addAggregator(self.SCOPE_EDGE, name)
-
-        # Estatísticas de regularidade
-        nodeHits, edgeHits, edgeSrcHits, edgeTgtHits = fullMorphismStats(self,
-                nodeClass, edgeClass)
 
         for node in self.nodes():
             newNode = nodeClass(node)
@@ -793,14 +931,59 @@ class MultiGraph(object):
         for edge in newGraph.edges():
             newGraph.setEdgeAttr(edge, relationAttr, str(edge[2]))
 
-        newGraph.setNodeAttrFromDict('node_count', nodeHits,
-                default=0, attrType=int)
-        newGraph.setEdgeAttrFromDict('edge_srcCount', edgeSrcHits,
-                default=0, attrType=int)
-        newGraph.setEdgeAttrFromDict('edge_tgtCount', edgeTgtHits,
-                default=0, attrType=int)
-        newGraph.setEdgeAttrFromDict('edge_count', edgeHits,
-                default=0, attrType=int)
+        # Estatísticas de regularidade
+        nodeHits, edgeHits, edgeSrcHits, edgeTgtHits = fullMorphismStats(self,
+                nodeClass, edgeClass)
+
+        if countPrefix:
+            newGraph.setNodeAttrFromDict(countPrefix+'_node', nodeHits,
+                    default=0, attrType=int)
+            newGraph.setEdgeAttrFromDict(countPrefix+'_src', edgeSrcHits,
+                    default=0, attrType=int)
+            newGraph.setEdgeAttrFromDict(countPrefix+'_tgt', edgeTgtHits,
+                    default=0, attrType=int)
+            newGraph.setEdgeAttrFromDict(countPrefix+'_edge', edgeHits,
+                    default=0, attrType=int)
+
+        if regIdxPrefix:
+            preStats = calcPreRegIdxStats(nodeHits, edgeHits, edgeSrcHits,
+                    edgeTgtHits)
+
+            regIdx = calcEdgeRegIdx(preStats)
+            attrMap = {e:v.ri for e,v in regIdx.items()}
+            newGraph.setEdgeAttrFromDict(regIdxPrefix, attrMap, default=0,
+                    attrType=float)
+            attrMap = {e:v.sri for e,v in regIdx.items()}
+            newGraph.setEdgeAttrFromDict(regIdxPrefix+'_src', attrMap,
+                    default=0, attrType=float)
+            attrMap = {e:v.tri for e,v in regIdx.items()}
+            newGraph.setEdgeAttrFromDict(regIdxPrefix+'_tgt', attrMap,
+                    default=0, attrType=float)
+
+            regIdx = calcGraphRegIdx(preStats)
+            spec = AttrSpec(regIdxPrefix, float, 0.0)
+            newGraph.addGraphAttrSpec(spec)
+            newGraph.setGraphAttr(spec.name, regIdx.ri)
+            spec = AttrSpec(regIdxPrefix+'_src', float, 0.0)
+            newGraph.addGraphAttrSpec(spec)
+            newGraph.setGraphAttr(spec.name, regIdx.sri)
+            spec = AttrSpec(regIdxPrefix+'_tgt', float, 0.0)
+            newGraph.addGraphAttrSpec(spec)
+            newGraph.setGraphAttr(spec.name, regIdx.tri)
+
+            regIdx = calcNodeRegIdx(nodeHits, preStats)
+            attrMap = {n:v.ri for n,v in regIdx.items()}
+            newGraph.setNodeAttrFromDict(regIdxPrefix, attrMap, default=0.0,
+                    attrType=float)
+            attrMap = {n:v.nri for n,v in regIdx.items()}
+            newGraph.setNodeAttrFromDict(regIdxPrefix+'_node', attrMap,
+                    default=0.0, attrType=float)
+            attrMap = {n:v.sri for n,v in regIdx.items()}
+            newGraph.setNodeAttrFromDict(regIdxPrefix+'_src', attrMap,
+                    default=0.0, attrType=float)
+            attrMap = {n:v.tri for n,v in regIdx.items()}
+            newGraph.setNodeAttrFromDict(regIdxPrefix+'_tgt', attrMap,
+                    default=0.0, attrType=float)
 
         return newGraph
 

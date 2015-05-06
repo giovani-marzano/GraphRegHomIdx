@@ -579,8 +579,8 @@ class GraphAppControl(object):
 
         self._callChangeHandlers(gmod)
 
-    def fullHomomorphism(self, graphName, newGraphName, nodeClassAttr,
-            edgeClassAttr, regIdxPrefix=None):
+    def fullHomomorphism(self, graphName, newGraphName, nodeClassAttr=None,
+            edgeClassAttr=None, regIdxPrefix=None, countPrefix=None):
 
         if regIdxPrefix:
             regIdxPrefix = regIdxPrefix.strip()
@@ -603,16 +603,9 @@ class GraphAppControl(object):
             if edgeClassAttr not in gmod.graph.getEdgeAttrNames():
                 raise KeyError("Atributo de aresta '{0}' não existe".format(edgeClassAttr))
 
-        # TODO: Temporário - criando agregadores para todos os atributos
-        # numéricos
-        self._createAggrForAllNumericAttr(graphName)
-
         newG = gmod.graph.spawnFromClassAttributes(nodeClassAttr=nodeClassAttr,
-                edgeClassAttr=edgeClassAttr)
-
-        # Calculando os índices de regularidade
-        if regIdxPrefix:
-            evaluateRegularIndex(newG, regIdxPrefix, self.logger)
+                edgeClassAttr=edgeClassAttr, regIdxPrefix=regIdxPrefix,
+                countPrefix=countPrefix)
 
         self.insertGraph(newG, newGraphName)
 
@@ -651,166 +644,6 @@ class GraphAppControl(object):
 
         if changed:
             self._callChangeHandlers(gmod)
-
-def evaluateRegularIndex(newG, regIdxPrefix, logger):
-
-    # calcRegIdx_xxx
-    # Funções auxiliares para o cálculo dos índices de regularidade dos nodos e
-    # do grafo como um todo.
-    #
-    # Estas funções serão chamadas durante o processamento de cada aresta.
-    #
-    # Os arqumentos das funções são:
-    #   - n0: valor atual do numerador do índice
-    #   - d0: valor atual do denominador do índice
-    #   - ns: Numerador do nodo de origem da aresta = contagem de quantos nodos
-    #       do grafo original são origem de arestas mapeadas na aresta atual
-    #   - ds: Denominador do nodo de origem = contagem de nodos do grafo
-    #       original mapeados no nodo de origem
-    #   - nt: Numerador do nodo de destino da aresta = contagem de quantos nodos
-    #       do grafo original são destino de arestas mapeadas na aresta atual
-    #   - dt: Denominador do nodo de destino = contagem de nodos do grafo
-    #       original mapeados no nodo de destino
-    #   - ec: Contagem de arestas do grafo original mapeadas na aresta atual
-    #   - scope:
-    #       - src: A função deve atualizar os dados para o nodo de origem da
-    #           aresta atual.
-    #       - tgt: A função deve atualizar os dados para o nodo de destino da
-    #           aresta atual.
-    #       - graph: A função deve atualizar os dados para o grafo como um todo.
-    #
-    # As funções devem retornar o numerador e o denominador atualizados.
-    #
-
-    def calcRegIdx_src(n0, d0, ns, ds, nt, dt, ec, scope):
-        """Atualiza o numerador e denominador para o calculo do indice de
-        regularidade parcial de origem: só considera os nodos de origem das
-        arestas.
-        """
-        if scope == 'src':
-            return n0 + ec*ns, d0 + ec*ds
-        elif scope == 'tgt':
-            return n0, d0
-        elif scope == 'graph':
-            return n0 + ec*ns, d0 + ec*ds
-        else:
-            raise ValueError('Invalid scope "{0}"'.format(scope))
-
-    def calcRegIdx_tgt(n0, d0, ns, ds, nt, dt, ec, scope):
-        """Atualiza o numerador e denominador para o calculo do indice de
-        regularidade parcial de destino: só considera os nodos de destino das
-        arestas.
-        """
-        if scope == 'src':
-            return n0, d0
-        elif scope == 'tgt':
-            return n0 + ec*nt, d0 + ec*dt
-        elif scope == 'graph':
-            return n0 + ec*nt, d0 + ec*dt
-        else:
-            raise ValueError('Invalid scope "{0}"'.format(scope))
-
-    def calcRegIdx_node(n0, d0, ns, ds, nt, dt, ec, scope):
-        """Atualiza o numerador e denominador para o calculo do indice de
-        regularidade de nodos: só considera a extremidade da aresta
-        (origem ou destino) que toca o nodo.
-        """
-        if scope == 'src':
-            return n0 + ec*ns, d0 + ec*ds
-        elif scope == 'tgt':
-            return n0 + ec*nt, d0 + ec*dt
-        elif scope == 'graph':
-            return n0 + ec*(ns+nt), d0 + ec*(ds +dt)
-        else:
-            raise ValueError('Invalid scope "{0}"'.format(scope))
-
-    def calcRegIdx_edges(n0, d0, ns, ds, nt, dt, ec, scope):
-        """Atualiza o numerador e denominador para o calculo do indice de
-        regularidade considerando a aresta inteira: O índice de um nodo será o
-        índice médio das arestas do qual participa não importando se como origem
-        ou destino.
-        """
-        return n0 + ec*(ns+nt), d0 + ec*(ds +dt)
-
-    vetCalcRegIdxGraph = [(regIdxPrefix+'_src',calcRegIdx_src),
-        (regIdxPrefix+'_tgt',calcRegIdx_tgt),
-        (regIdxPrefix,calcRegIdx_edges)]
-
-    graphTotals = [(0,0) for f in vetCalcRegIdxGraph]
-
-    vetCalcRegIdxNode = [
-        (regIdxPrefix+'_src', calcRegIdx_src),
-        (regIdxPrefix+'_tgt', calcRegIdx_tgt),
-        (regIdxPrefix+'_node', calcRegIdx_node),
-        (regIdxPrefix, calcRegIdx_edges)
-    ]
-
-    nodeTotals = {}
-
-    attrs = {
-        'edge': regIdxPrefix,
-        'edgeTgt': regIdxPrefix+'_tgt',
-        'edgeSrc': regIdxPrefix+'_src'
-    }
-    for _, name in attrs.items():
-        spec = gr.AttrSpec(name, float, 0)
-        newG.addEdgeAttrSpec(spec)
-    for edge in newG.edges():
-        src, tgt, rel = edge
-        ds = newG.getNodeAttr(src, 'node_count')
-        dt = newG.getNodeAttr(tgt, 'node_count')
-        ns = newG.getEdgeAttr(edge, 'edge_srcCount')
-        nt = newG.getEdgeAttr(edge, 'edge_tgtCount')
-        ec = newG.getEdgeAttr(edge, 'edge_count')
-        newG.setEdgeAttr(edge, attrs['edge'], (ns+nt)/(ds+dt))
-        newG.setEdgeAttr(edge, attrs['edgeTgt'], (nt)/(dt))
-        newG.setEdgeAttr(edge, attrs['edgeSrc'], (ns)/(ds))
-
-        for i, (_, calcf) in enumerate(vetCalcRegIdxGraph):
-            n0, d0 = graphTotals[i]
-            graphTotals[i] = calcf(n0, d0, ns, ds, nt, dt, ec, 'graph')
-
-        nodeNDs = nodeTotals.setdefault(src,[(0,0) for f in vetCalcRegIdxNode])
-        for i, (_, calcf) in enumerate(vetCalcRegIdxNode):
-            n0, d0 = nodeNDs[i]
-            nodeNDs[i] = calcf(n0, d0, ns, ds, nt, dt, ec, 'src')
-
-        nodeNDs = nodeTotals.setdefault(tgt,[(0,0) for f in vetCalcRegIdxNode])
-        for i, (_, calcf) in enumerate(vetCalcRegIdxNode):
-            n0, d0 = nodeNDs[i]
-            nodeNDs[i] = calcf(n0, d0, ns, ds, nt, dt, ec, 'tgt')
-
-    for i, ND in enumerate(graphTotals):
-        n, d = ND
-        attrName = vetCalcRegIdxGraph[i][0]
-        spec = gr.AttrSpec(attrName, float, 0)
-        newG.addGraphAttrSpec(spec)
-        newG.setGraphAttr(attrName, n/d)
-
-    for attrName, _ in vetCalcRegIdxNode:
-        spec = gr.AttrSpec(attrName, float, 0)
-        newG.addNodeAttrSpec(spec)
-
-    for node in newG.nodes():
-        nodeNDs = nodeTotals.get(node,[(0,0) for f in vetCalcRegIdxNode])
-
-        for i, ND in enumerate(nodeNDs):
-            attrName = vetCalcRegIdxNode[i][0]
-            n, d = ND
-            if d > 0:
-                newG.setNodeAttr(node, attrName, n/d)
-            else:
-                # O nodo pode não ter arestas
-                count = newG.getNodeAttr(node, 'node_count')
-                if count > 0:
-                    newG.setNodeAttr(node, attrName, 1.0)
-                else:
-                    # Isto aqui não devia acontecer
-                    newG.setNodeAttr(node, attrName, 0.0)
-                    logger.error(
-                        ('Nodo {0} sem nodos ?!! '+
-                        'count {1}, n {2}, d {3}').format(
-                            node, count, n, d))
 
 #---------------------------------------------------------------------
 # Classes GUI
@@ -2078,6 +1911,8 @@ class FullHomomorphismDialog(Dialog):
         self.edgeClassAttr = None
         self.regIdxPref = tk.StringVar()
         self.regIdxPref.set('regIdx')
+        self.countPref = tk.StringVar()
+        self.countPref.set('count')
         self.nodeAttrs = []
         self.edgeAttrs = []
 
@@ -2141,6 +1976,11 @@ class FullHomomorphismDialog(Dialog):
         lb = ttk.Label(master, text='Prefixo para índice de regularidade:',
                 justify=tk.RIGHT, anchor=tk.E)
         entry = ttk.Entry(master, textvariable=self.regIdxPref)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry)
+
+        lb = ttk.Label(master, text='Prefixo para atrinutos de contagem:',
+                justify=tk.RIGHT, anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.countPref)
         row = gridLabelAndWidgets(row, labelwidth, lb, entry)
 
         self._updateButtonStates()
@@ -2235,13 +2075,15 @@ class FullHomomorphismDialog(Dialog):
         origName = self.graphName.get().strip()
         destName = self.newGraphName.get().strip()
         regIdxPrefix = self.regIdxPref.get().strip()
+        countPrefix = self.countPref.get().strip()
 
         def execute():
             self.control.fullHomomorphism(graphName=origName,
                 newGraphName=destName,
                 nodeClassAttr=self.nodeClassAttr,
                 edgeClassAttr=self.edgeClassAttr,
-                regIdxPrefix=regIdxPrefix)
+                regIdxPrefix=regIdxPrefix,
+                countPrefix=countPrefix)
 
         gui.ExecutionDialog(master=self.master, command=execute,
                 logger=self.control.logger)
