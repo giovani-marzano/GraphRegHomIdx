@@ -397,9 +397,13 @@ class MultiGraph(object):
         return self._numEdges
 
     def outNeighboors(self, node):
+        """outNeighboors(node) -> (tgt1, rel), (tgt2, rel), ...
+        """
         return iter(self._adjOut[node])
 
     def inNeighboors(self, node):
+        """inNeighboors(node) -> (src1, rel), (src2, rel), ...
+        """
         return iter(self._adjIn[node])
 
     def neighboors(self, node):
