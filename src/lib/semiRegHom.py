@@ -160,7 +160,32 @@ def _calcEdgeAndGraphRegIdx(g, nodeClass):
 
     return edgeRegIdx, graphRegIdx
 
-def ksemiRegularClass(g, k, iMax, visitor):
+def _spreadPatterns(clsPatterns):
+    for c1, v1 in clsPatterns.items():
+        for c2, v2 in clsPatterns.items():
+            if c1 == c2: continue
+            wp = sum(map(lambda x: x[0]*x[1], zip(v1,v2)))
+            vp = map(lambda x: wp*x, v2)
+            for i, x in enumerate(vp):
+                v1[i] -= x
+
+
+class Toolbox(object):
+    def __init__(self, spreadIteration=0):
+        self.spreadIteration=0
+
+    def generateClassNodes(self, g, k):
+        return {n: random.randint(1,k) for n in g.nodes()}
+
+    def actualizeClassPatterns(self, iNum, clsPatterns, patternToIdx,
+            edgeRegIdx):
+        _actualizeClassPatterns(clsPatterns, patternToIdx, edgeRegIdx)
+        if iNum == self.spreadIteration:
+            _spreadPatterns(clsPatterns)
+
+toolbox = Toolbox()
+
+def ksemiRegularClass(g, k, iMax, visitor, toolbox=toolbox):
     """Algoritmo que encontra uma classificação com *k* classes para os vértices
     do grafo *g* de forma que o homomorfismo induzido por esta classificação
     seja aproximadamente regular.
@@ -187,11 +212,11 @@ def ksemiRegularClass(g, k, iMax, visitor):
     """
     # Criando mapa de padrao de conexao para indice no vetor de padrao
     # Número de relações * 2 (entrada e saida) * número de classes (k)
-    pattIter = list(itertools.product(g.relations,(IN,OUT),range(1,k+1)))
+    pattIter = itertools.product(g.relations,(IN,OUT),range(1,k+1))
     patternToIdx = {p:i for i, p in enumerate(pattIter)}
 
     # Criando classificação inicial
-    nodeClass = {n: random.randint(1,k) for n in g.nodes()}
+    nodeClass = toolbox.generateClassNodes(g, k)
 
     # Criando vetores de padrao de conexão para as classes
     clsPatterns = {}
@@ -204,7 +229,8 @@ def ksemiRegularClass(g, k, iMax, visitor):
     for iNum in range(iMax):
         # Atualizando os vetores de padrao de conexão das classes
         edgeRegIdx, graphRegIdx = _calcEdgeAndGraphRegIdx(g, nodeClass)
-        _actualizeClassPatterns(clsPatterns, patternToIdx, edgeRegIdx)
+        toolbox.actualizeClassPatterns(iNum, clsPatterns, patternToIdx,
+                edgeRegIdx)
 
         visitor.iteration(iNum, nodeClass, graphRegIdx, clsPatterns)
 

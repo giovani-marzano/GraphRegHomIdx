@@ -66,6 +66,8 @@ CSV_OUT_DIALECT='appcsvdialect'
 #---------------------------------------------------------------------
 import graph as gr
 from semiRegHom import KSemiRegClassVisitor, ksemiRegularClass
+import semiRegHom
+import random
 
 class GraphModel(object):
     def __init__(self, graphObj, name, filename=None):
@@ -640,7 +642,8 @@ class GraphAppControl(object):
             self._callChangeHandlers(gmod)
 
     def classifySemiRegular(self, graphName, classAttr, numClasses,
-            numIterations, bestClassFileName=None, allClassFileName=None):
+            numIterations, bestClassFileName=None, allClassFileName=None,
+            randSeed=None, spreadIteration=0):
 
         if graphName not in self.graphModels.keys():
             raise KeyError(
@@ -657,6 +660,10 @@ class GraphAppControl(object):
         visitor = KSemiRegClassVisitor(self.logger,
                 bestClassFileName=bestClassFileName,
                 classFileName=allClassFileName)
+
+        random.seed(randSeed)
+
+        semiRegHom.toolbox.spreadIteration = spreadIteration
 
         with visitor as v:
             ksemiRegularClass(gmod.graph, numClasses, numIterations, v)
@@ -1938,6 +1945,10 @@ class ClassifySemiRegularDialog(Dialog):
         self.numClasses.set(5)
         self.numIterations = tk.IntVar()
         self.numIterations.set(10)
+        self.randSeed = tk.IntVar()
+        self.randSeed.set(-1)
+        self.spreadIteration = tk.IntVar()
+        self.spreadIteration.set(0)
 
         if selectedGraph:
             self._setGraphName(selectedGraph)
@@ -1975,6 +1986,20 @@ class ClassifySemiRegularDialog(Dialog):
             justify=tk.RIGHT, anchor=tk.E)
         spin = tk.Spinbox(master, textvariable=self.numIterations,
                 from_=1, to=100, increment=1)
+        row = gridLabelAndWidgets(row, labelwidth, lb, spin)
+
+        lb = ttk.Label(master,
+            text='Iteração para distanciar padrão das classes:',
+            justify=tk.RIGHT, anchor=tk.E)
+        spin = tk.Spinbox(master, textvariable=self.spreadIteration,
+                from_=-1, to=100, increment=1)
+        row = gridLabelAndWidgets(row, labelwidth, lb, spin)
+
+        lb = ttk.Label(master,
+            text='Random seed:',
+            justify=tk.RIGHT, anchor=tk.E)
+        spin = tk.Spinbox(master, textvariable=self.randSeed,
+                from_=-1, to=100, increment=1)
         row = gridLabelAndWidgets(row, labelwidth, lb, spin)
 
         self._updateButtonStates()
@@ -2028,13 +2053,20 @@ class ClassifySemiRegularDialog(Dialog):
         graphName = self.graphName.get()
         numClasses = self.numClasses.get()
         numIterations = self.numIterations.get()
+        randSeed = self.randSeed.get()
+        spreadIteration = self.spreadIteration.get()
+
+        if randSeed == -1:
+            randSeed=None
 
         def execute():
             self.control.classifySemiRegular(
                 graphName=graphName,
                 classAttr=classAttr,
                 numClasses=numClasses,
-                numIterations=numIterations)
+                numIterations=numIterations,
+                randSeed=randSeed,
+                spreadIteration=spreadIteration)
 
         gui.ExecutionDialog(master=self.master, command=execute,
                 logger=self.control.logger)
