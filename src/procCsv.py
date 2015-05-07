@@ -452,9 +452,27 @@ def exp05():
             lambda rn, row: row[0] != row[1]
         ])
 
+def exp09():
+    """Processando o arquivo do facebook para retirar arestas do tipo Liker.
+    """
+
+    processaCsv('data/face2014-08.csv', 'data/semLiker.csv',
+        outHeader=['src','tgt','relation','weight'],
+        procFuncs=[
+            genIdentity(0),
+            genIdentity(1),
+            genIdentity(2),
+            genIdentity(3),
+        ],
+        filterFuncs=[
+            genSkipRows([0]),
+            lambda rn, row: row[2] != 'Liker'
+        ])
+
 if __name__ == '__main__':
     #exp01()
     #exp02()
     #exp03()
     #exp05()
+    exp09()
     pass
