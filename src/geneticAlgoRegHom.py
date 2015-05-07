@@ -84,9 +84,10 @@ def createRegIdxEvalFunction(g):
             return idxToClass[i]
 
         stats = gr.fullMorphismStats(g, nodeClassF, edgeRelF)
-        regIdx = gr.calcGraphRegIdx(*stats)
+        preStats = gr.calcPreRegIdxStats(*stats)
+        regIdx = gr.calcGraphRegIdx(preStats)
 
-        return (regIdx, )
+        return (regIdx.ri, )
 
     return evaluate, nodeToIdx
 
