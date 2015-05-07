@@ -176,6 +176,9 @@ class GraphAppControl(object):
             name = '{0:03}'.format(n)
         return name
 
+    def getNumGraphs(self):
+        return len(self.graphModels)
+
     def getGraphNames(self):
         return sorted(self.graphModels.keys())
 
@@ -787,17 +790,28 @@ class GraphAppGUI(tk.Frame):
         """
         pos = 'end'
         iid, _ = self.getGraphAndTreeIid(graphModel)
+        shouldSelect = False
 
         # Removing the graph
         if iid is not None:
+            selIid = self.getSelectedGraphIid()
+            if iid == selIid:
+                shouldSelect = True
             pos = self.graphTree.index(iid)
             self.removeGraphView(iid)
+        else:
+            # seleciona o grafo inserido se for o único da lista
+            if self.control.getNumGraphs() == 1:
+                shouldSelect = True
 
         # (Re)inserting the graph
         filename = graphModel.filename or ''
         iid = self.graphTree.insert('', pos,
             text=graphModel.name,
             values=(filename, 'graph'))
+
+        if shouldSelect:
+            self.graphTree.selection_set(iid)
 
         self.iidToGraph[iid] = graphModel
         self.graphToIid[graphModel] = iid
@@ -1934,6 +1948,11 @@ class ClassifyRegularEquivDialog(Dialog):
                 logger=self.control.logger)
 
 class ClassifySemiRegularDialog(Dialog):
+    SPREAD_ITER = 0
+    RAND_SEED = -1
+    NUM_CLASSES = 5
+    NUM_ITER = 10
+
     def __init__(self, master, control, selectedGraph=''):
 
         self.master = master
@@ -1942,13 +1961,13 @@ class ClassifySemiRegularDialog(Dialog):
         self.graphName = tk.StringVar()
         self.classAttr = tk.StringVar()
         self.numClasses = tk.IntVar()
-        self.numClasses.set(5)
+        self.numClasses.set(ClassifySemiRegularDialog.NUM_CLASSES)
         self.numIterations = tk.IntVar()
-        self.numIterations.set(10)
+        self.numIterations.set(ClassifySemiRegularDialog.NUM_ITER)
         self.randSeed = tk.IntVar()
-        self.randSeed.set(-1)
+        self.randSeed.set(ClassifySemiRegularDialog.RAND_SEED)
         self.spreadIteration = tk.IntVar()
-        self.spreadIteration.set(0)
+        self.spreadIteration.set(ClassifySemiRegularDialog.SPREAD_ITER)
 
         if selectedGraph:
             self._setGraphName(selectedGraph)
@@ -2055,6 +2074,12 @@ class ClassifySemiRegularDialog(Dialog):
         numIterations = self.numIterations.get()
         randSeed = self.randSeed.get()
         spreadIteration = self.spreadIteration.get()
+
+        # Atualizando os valores default
+        ClassifySemiRegularDialog.NUM_ITER = numIterations
+        ClassifySemiRegularDialog.RAND_SEED = randSeed
+        ClassifySemiRegularDialog.NUM_CLASSES = numClasses
+        ClassifySemiRegularDialog.SPREAD_ITER = spreadIteration
 
         if randSeed == -1:
             randSeed=None
