@@ -10,14 +10,19 @@ import graph as gr
 import math
 import random
 import itertools
+import logging
 
 #---------------------------------------------------------------------
 # Definições
 #---------------------------------------------------------------------
 
+# Logger utilizado pelo modulo
+logger = logging.getLogger(__name__)
+
 # Constantes para direção da aresta
 IN = 0
 OUT = 1
+AUTO = 2
 
 def normalizeVet(vet):
     """Normaliza o vetor fornecido, aterando-o.
@@ -29,6 +34,9 @@ def normalizeVet(vet):
             vet[i] = v/s
 
     return vet
+
+def vetDotProduct(v1, v2):
+    return sum(map(lambda x: x[0]*x[1], zip(v1,v2)))
 
 class KSemiRegClassVisitor(object):
     """Implementação de um visitante para o algoritmo ksemiRegularClass.
@@ -54,7 +62,7 @@ class KSemiRegClassVisitor(object):
     - bestRegIdx: Índice de regularidade de grafo da melhor classificação.
 
     """
-    def __init__(self, logger, bestClassFileName=None, classFileName=None):
+    def __init__(self, logger=logger, bestClassFileName=None, classFileName=None):
         if (bestClassFileName and classFileName
                 and bestClassFileName == classFileName):
             bestClassFileName = 'best_' + bestClassFileName
@@ -78,6 +86,9 @@ class KSemiRegClassVisitor(object):
                     graphRegIdx.ri, graphRegIdx.sri, graphRegIdx.tri))
         self._writeClasses(i, nodeClass)
 
+        if self.logger.isEnabledFor(logging.DEBUG):
+            self.logClassSimilarities(clsPatterns)
+
         if graphRegIdx.ri >= self.bestRegIdx:
             self.bestRegIdx = graphRegIdx.ri
             self.bestNodeClass = nodeClass
@@ -86,6 +97,17 @@ class KSemiRegClassVisitor(object):
         self.logger.info(
             'END ksemiRegularClass: best {0:.4f}'.format(self.bestRegIdx))
         self._writeBestClasses()
+
+    def logClassSimilarities(self, clsPatterns):
+        self.logger.debug('Class similarities:')
+        classes = sorted(clsPatterns.keys())
+        for c1 in classes:
+            sim = []
+            v1 = clsPatterns[c1]
+            for c2 in classes:
+                v2 = clsPatterns[c2]
+                sim.append(round(vetDotProduct(v1,v2),2))
+            self.logger.debug('  %s: %s', str(c1), str(sim))
 
     def __enter__(self):
         """Context manager enter function.
@@ -149,6 +171,12 @@ def _actualizeClassPatterns(clsPatterns, patternToIdx, edgeRegIdx):
         idx = patternToIdx[pat]
         clsPatterns[tgt][idx] = regIdx.tri
 
+        # Padrao para auto loops
+        if src == tgt:
+            pat = (rel, AUTO)
+            idx = patternToIdx[pat]
+            clsPatterns[src][idx] = regIdx.ri
+
     for cls, vet in clsPatterns.items():
         normalizeVet(vet)
 
@@ -164,10 +192,11 @@ def _spreadPatterns(clsPatterns):
     for c1, v1 in clsPatterns.items():
         for c2, v2 in clsPatterns.items():
             if c1 == c2: continue
-            wp = sum(map(lambda x: x[0]*x[1], zip(v1,v2)))
+            wp = vetDotProduct(v1,v2)
             vp = map(lambda x: wp*x, v2)
             for i, x in enumerate(vp):
                 v1[i] -= x
+            normalizeVet(v1)
 
 
 class Toolbox(object):
@@ -212,8 +241,10 @@ def ksemiRegularClass(g, k, iMax, visitor, toolbox=toolbox):
     """
     # Criando mapa de padrao de conexao para indice no vetor de padrao
     # Número de relações * 2 (entrada e saida) * número de classes (k)
-    pattIter = itertools.product(g.relations,(IN,OUT),range(1,k+1))
-    patternToIdx = {p:i for i, p in enumerate(pattIter)}
+    iterInOutPatt = itertools.product(g.relations,(IN,OUT),range(1,k+1))
+    iterAutoPatt = itertools.product(g.relations,(AUTO,))
+    iterPatt = itertools.chain(iterAutoPatt, iterInOutPatt)
+    patternToIdx = {p:i for i, p in enumerate(iterPatt)}
 
     # Criando classificação inicial
     nodeClass = toolbox.generateClassNodes(g, k)
@@ -241,12 +272,20 @@ def ksemiRegularClass(g, k, iMax, visitor, toolbox=toolbox):
             vet = [0.0 for _ in patternToIdx]
 
             for nei, rel in g.outNeighboors(node):
-                pat = (rel, OUT, nodeClass[nei])
+                if nei == node:
+                    pat = (rel, AUTO)
+                else:
+                    pat = (rel, OUT, nodeClass[nei])
+
                 idx = patternToIdx[pat]
                 vet[idx] += 1
                 hasEdge = True
 
             for nei, rel in g.inNeighboors(node):
+                if nei == node:
+                    # já foi contabilizada
+                    continue
+
                 pat = (rel, IN, nodeClass[nei])
                 idx = patternToIdx[pat]
                 vet[idx] += 1
@@ -258,7 +297,7 @@ def ksemiRegularClass(g, k, iMax, visitor, toolbox=toolbox):
                 maxRank = float('-inf')
                 for cls, clsVet in clsPatterns.items():
                     # produto vetorial
-                    rank = sum(map(lambda x: x[0]*x[1], zip(vet, clsVet)))
+                    rank = vetDotProduct(vet, clsVet)
                     if rank > maxRank:
                         maxRank = rank
                         newCls = cls
