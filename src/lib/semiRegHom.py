@@ -11,6 +11,7 @@ import math
 import random
 import itertools
 import logging
+import heapq
 
 #---------------------------------------------------------------------
 # Definições
@@ -37,6 +38,14 @@ def normalizeVet(vet):
 
 def vetDotProduct(v1, v2):
     return sum(map(lambda x: x[0]*x[1], zip(v1,v2)))
+
+def zeroVet(vet):
+    for i in range(len(vet)):
+        vet[i] = 0.0
+
+def addIntoVet1(v1, v2):
+    for i in range(len(v1)):
+        v1[i] += v2[i]
 
 class KSemiRegClassVisitor(object):
     """Implementação de um visitante para o algoritmo ksemiRegularClass.
@@ -81,7 +90,10 @@ class KSemiRegClassVisitor(object):
             "BEGIN ksemiRegularClass: {0} classes {1} iterations".format(
                 k, iMax))
 
-    def iteration(self, i, nodeClass, graphRegIdx, clsPatterns):
+    def iteration(self, g, i, nodeClass, clsPatterns):
+        regStats = gr.fullMorphismStats(g, _createNodeClsF(nodeClass), _edgeClsF)
+        edgeStats = gr.calcPreRegIdxStats(*regStats)
+        graphRegIdx = gr.calcGraphRegIdx(edgeStats)
         self.logger.info("Iter {0} {1:.4f} {2:.4f} {3:.4f}".format(i,
                     graphRegIdx.ri, graphRegIdx.sri, graphRegIdx.tri))
         self._writeClasses(i, nodeClass)
@@ -100,12 +112,9 @@ class KSemiRegClassVisitor(object):
 
     def logClassSimilarities(self, clsPatterns):
         self.logger.debug('Class similarities:')
-        classes = sorted(clsPatterns.keys())
-        for c1 in classes:
+        for c1, v1 in enumerate(clsPatterns):
             sim = []
-            v1 = clsPatterns[c1]
-            for c2 in classes:
-                v2 = clsPatterns[c2]
+            for c2, v2 in enumerate(clsPatterns):
                 sim.append(round(vetDotProduct(v1,v2),2))
             self.logger.debug('  %s: %s', str(c1), str(sim))
 
@@ -156,7 +165,7 @@ def _edgeClsF(edge):
     return edge[2]
 
 def _actualizeClassPatterns(clsPatterns, patternToIdx, edgeRegIdx):
-    for cls, vet in clsPatterns.items():
+    for vet in clsPatterns:
         for i in range(len(vet)):
             vet[i] = 0.0
 
@@ -177,20 +186,12 @@ def _actualizeClassPatterns(clsPatterns, patternToIdx, edgeRegIdx):
             idx = patternToIdx[pat]
             clsPatterns[src][idx] = regIdx.ri
 
-    for cls, vet in clsPatterns.items():
+    for vet in clsPatterns:
         normalizeVet(vet)
 
-def _calcEdgeAndGraphRegIdx(g, nodeClass):
-    regStats = gr.fullMorphismStats(g, _createNodeClsF(nodeClass), _edgeClsF)
-    edgeStats = gr.calcPreRegIdxStats(*regStats)
-    edgeRegIdx = gr.calcEdgeRegIdx(edgeStats)
-    graphRegIdx = gr.calcGraphRegIdx(edgeStats)
-
-    return edgeRegIdx, graphRegIdx
-
 def _spreadPatterns(clsPatterns):
-    for c1, v1 in clsPatterns.items():
-        for c2, v2 in clsPatterns.items():
+    for c1, v1 in enumerate(clsPatterns):
+        for c2, v2 in enumerate(clsPatterns):
             if c1 == c2: continue
             wp = vetDotProduct(v1,v2)
             vp = map(lambda x: wp*x, v2)
@@ -198,19 +199,99 @@ def _spreadPatterns(clsPatterns):
                 v1[i] -= x
             normalizeVet(v1)
 
+def _genNodesPatterns(g, nodeClass, patternToIdx):
+    for node in nodeClass.keys():
+        hasEdge = False
+        vet = [0.0 for _ in patternToIdx]
+
+        # OBS: Nas contabilizações abaixo estamos apenas setando com 1 os
+        # padrões de conexão do nodo ao invés de acumular. Isto porque em testes
+        # parece que desta forma (sem levar em conta o número de arestas) o
+        # grafo resultante ficava mais limpo.
+        for nei, rel in g.outNeighboors(node):
+            if nei == node:
+                pat = (rel, AUTO)
+            else:
+                pat = (rel, OUT, nodeClass[nei])
+
+            idx = patternToIdx[pat]
+            vet[idx] = 1
+            hasEdge = True
+
+        for nei, rel in g.inNeighboors(node):
+            if nei == node:
+                # já foi contabilizada
+                continue
+
+            pat = (rel, IN, nodeClass[nei])
+            idx = patternToIdx[pat]
+            vet[idx] = 1
+            hasEdge = True
+
+        yield (node, vet, hasEdge)
 
 class Toolbox(object):
     def __init__(self, spreadIteration=0):
         self.spreadIteration=0
 
-    def generateClassNodes(self, g, k):
-        return {n: random.randint(1,k) for n in g.nodes()}
+        # Probabilidade de escolher a melhor classe
+        self.initialChoicePb = 1.0
+        self.choicePb = 1.0
+        self.deltaChoicePb = 0.05
 
-    def actualizeClassPatterns(self, iNum, clsPatterns, patternToIdx,
-            edgeRegIdx):
-        _actualizeClassPatterns(clsPatterns, patternToIdx, edgeRegIdx)
+    def atualizeChoicePb(self, iNum):
+        if iNum > 0:
+            self.choicePb = min(self.choicePb + self.deltaChoicePb, 1.0)
+        else:
+            self.choicePb = self.initialChoicePb
+
+    def generateInitialNodeClass(self, g, k):
+        return {n: random.randrange(k) for n in g.nodes()}
+
+    def actualizeClassPatterns(self, g, iNum, nodeClass, clsPatterns,
+            patternToIdx):
+
+        for clsPat in clsPatterns:
+            zeroVet(clsPat)
+
+        for node, vet, hasEdge in _genNodesPatterns(g, nodeClass, patternToIdx):
+            if hasEdge:
+                cls = nodeClass[node]
+                clsPat = clsPatterns[cls]
+                addIntoVet1(clsPat, vet)
+
+        for clsPat in clsPatterns:
+            normalizeVet(clsPat)
+
         if iNum == self.spreadIteration:
             _spreadPatterns(clsPatterns)
+
+
+    def generateNewNodeClass(self, g, iNum, nodeClass, clsPatterns,
+            patternToIdx):
+
+        self.atualizeChoicePb(iNum)
+
+        newNodeClass = {}
+        for node, vet, hasEdge in _genNodesPatterns(g, nodeClass, patternToIdx):
+            # escolhendo nova classe para o nodo
+            newCls = -1
+            if hasEdge:
+                rankHeap = []
+                for cls, clsVet in enumerate(clsPatterns):
+                    # produto vetorial
+                    rank = vetDotProduct(vet, clsVet)
+                    heapq.heappush(rankHeap,(-rank, cls))
+                while len(rankHeap) > 1:
+                    _, cls = heapq.heappop(rankHeap)
+                    if random.random() < self.choicePb:
+                        newCls = cls
+                        break
+                if newCls < 0:
+                    _, newCls = heapq.heappop(rankHeap)
+
+            newNodeClass[node] = newCls
+        return newNodeClass
 
 toolbox = Toolbox()
 
@@ -241,74 +322,34 @@ def ksemiRegularClass(g, k, iMax, visitor, toolbox=toolbox):
     """
     # Criando mapa de padrao de conexao para indice no vetor de padrao
     # Número de relações * 2 (entrada e saida) * número de classes (k)
-    iterInOutPatt = itertools.product(g.relations,(IN,OUT),range(1,k+1))
+    iterInOutPatt = itertools.product(g.relations,(IN,OUT),range(k))
     iterAutoPatt = itertools.product(g.relations,(AUTO,))
     iterPatt = itertools.chain(iterAutoPatt, iterInOutPatt)
     patternToIdx = {p:i for i, p in enumerate(iterPatt)}
 
     # Criando classificação inicial
-    nodeClass = toolbox.generateClassNodes(g, k)
+    nodeClass = toolbox.generateInitialNodeClass(g, k)
 
     # Criando vetores de padrao de conexão para as classes
-    clsPatterns = {}
-    for cls in range(1,k+1):
+    clsPatterns = []
+    for cls in range(k):
         pattVet = [0.0 for _ in patternToIdx]
-        clsPatterns[cls] = pattVet
+        clsPatterns.append(pattVet)
 
     visitor.begining(g, k, iMax)
 
     for iNum in range(iMax):
         # Atualizando os vetores de padrao de conexão das classes
-        edgeRegIdx, graphRegIdx = _calcEdgeAndGraphRegIdx(g, nodeClass)
-        toolbox.actualizeClassPatterns(iNum, clsPatterns, patternToIdx,
-                edgeRegIdx)
+        toolbox.actualizeClassPatterns(g, iNum, nodeClass, clsPatterns,
+                patternToIdx)
 
-        visitor.iteration(iNum, nodeClass, graphRegIdx, clsPatterns)
+        visitor.iteration(g, iNum, nodeClass, clsPatterns)
 
-        newNodeClass = {}
-
-        for node in nodeClass.keys():
-            hasEdge = False
-            vet = [0.0 for _ in patternToIdx]
-
-            for nei, rel in g.outNeighboors(node):
-                if nei == node:
-                    pat = (rel, AUTO)
-                else:
-                    pat = (rel, OUT, nodeClass[nei])
-
-                idx = patternToIdx[pat]
-                vet[idx] += 1
-                hasEdge = True
-
-            for nei, rel in g.inNeighboors(node):
-                if nei == node:
-                    # já foi contabilizada
-                    continue
-
-                pat = (rel, IN, nodeClass[nei])
-                idx = patternToIdx[pat]
-                vet[idx] += 1
-                hasEdge = True
-
-            # escolhendo nova classe para o nodo
-            newCls = 0
-            if hasEdge:
-                maxRank = float('-inf')
-                for cls, clsVet in clsPatterns.items():
-                    # produto vetorial
-                    rank = vetDotProduct(vet, clsVet)
-                    if rank > maxRank:
-                        maxRank = rank
-                        newCls = cls
-
-            newNodeClass[node] = newCls
-
-        nodeClass = newNodeClass
+        nodeClass = toolbox.generateNewNodeClass(g, iNum, nodeClass,
+                clsPatterns, patternToIdx)
 
     # Estatisticas finais
-    edgeRegIdx, graphRegIdx = _calcEdgeAndGraphRegIdx(g, nodeClass)
-    visitor.iteration(iMax, nodeClass, graphRegIdx, clsPatterns)
+    visitor.iteration(g, iMax, nodeClass, clsPatterns)
 
     visitor.ending()
 

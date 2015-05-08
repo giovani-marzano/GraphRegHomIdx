@@ -645,8 +645,9 @@ class GraphAppControl(object):
             self._callChangeHandlers(gmod)
 
     def classifySemiRegular(self, graphName, classAttr, numClasses,
-            numIterations, bestClassFileName=None, allClassFileName=None,
-            randSeed=None, spreadIteration=0):
+            numIterations, allClassFileName=None, bestClassFileName=None,
+            randSeed=None, spreadIteration=0, initialChoicePb=0.5,
+            deltaChoicePb=0.05):
 
         if graphName not in self.graphModels.keys():
             raise KeyError(
@@ -667,6 +668,8 @@ class GraphAppControl(object):
         random.seed(randSeed)
 
         semiRegHom.toolbox.spreadIteration = spreadIteration
+        semiRegHom.toolbox.initialChoicePb = initialChoicePb
+        semiRegHom.toolbox.deltaChoicePb = deltaChoicePb
 
         with visitor as v:
             ksemiRegularClass(gmod.graph, numClasses, numIterations, v)
@@ -1952,6 +1955,9 @@ class ClassifySemiRegularDialog(Dialog):
     RAND_SEED = -1
     NUM_CLASSES = 5
     NUM_ITER = 10
+    INITIAL_CHOICE_PB = 0.5
+    MIN_CHOICE_PB = 0.1
+    DELTA_CHOICE_PB = 0.05
 
     def __init__(self, master, control, selectedGraph=''):
 
@@ -1968,6 +1974,10 @@ class ClassifySemiRegularDialog(Dialog):
         self.randSeed.set(ClassifySemiRegularDialog.RAND_SEED)
         self.spreadIteration = tk.IntVar()
         self.spreadIteration.set(ClassifySemiRegularDialog.SPREAD_ITER)
+        self.initialChoicePb = tk.DoubleVar()
+        self.initialChoicePb.set(ClassifySemiRegularDialog.INITIAL_CHOICE_PB)
+        self.deltaChoicePb = tk.DoubleVar()
+        self.deltaChoicePb.set(ClassifySemiRegularDialog.DELTA_CHOICE_PB)
 
         if selectedGraph:
             self._setGraphName(selectedGraph)
@@ -2008,16 +2018,30 @@ class ClassifySemiRegularDialog(Dialog):
         row = gridLabelAndWidgets(row, labelwidth, lb, spin)
 
         lb = ttk.Label(master,
-            text='Iteração para distanciar padrão das classes:',
+            text='Probabilidade inicial:',
             justify=tk.RIGHT, anchor=tk.E)
-        spin = tk.Spinbox(master, textvariable=self.spreadIteration,
-                from_=-1, to=100, increment=1)
+        spin = tk.Spinbox(master, textvariable=self.initialChoicePb,
+                from_=self.MIN_CHOICE_PB, to=1.0, increment=0.05)
+        row = gridLabelAndWidgets(row, labelwidth, lb, spin)
+
+        lb = ttk.Label(master,
+            text='Incremento de probabilidade:',
+            justify=tk.RIGHT, anchor=tk.E)
+        spin = tk.Spinbox(master, textvariable=self.deltaChoicePb,
+                from_=0.0, to=1.0, increment=0.05)
         row = gridLabelAndWidgets(row, labelwidth, lb, spin)
 
         lb = ttk.Label(master,
             text='Random seed:',
             justify=tk.RIGHT, anchor=tk.E)
         spin = tk.Spinbox(master, textvariable=self.randSeed,
+                from_=-1, to=100, increment=1)
+        row = gridLabelAndWidgets(row, labelwidth, lb, spin)
+
+        lb = ttk.Label(master,
+            text='Iteração para distanciar padrão das classes:',
+            justify=tk.RIGHT, anchor=tk.E)
+        spin = tk.Spinbox(master, textvariable=self.spreadIteration,
                 from_=-1, to=100, increment=1)
         row = gridLabelAndWidgets(row, labelwidth, lb, spin)
 
@@ -2061,6 +2085,11 @@ class ClassifySemiRegularDialog(Dialog):
             isOk, errMsg = self.control.validateNewAttrs(self.graphName.get(),
             [spec], 'node')
 
+        if isOk and self.initialChoicePb.get() < self.MIN_CHOICE_PB:
+            isOk = False
+            errMsg = 'A probabilidade inicial deve ser maior ou igual a {0}'
+            errMsg = errMsg.format(self.MIN_CHOICE_PB)
+
         if not isOk:
             tk.messagebox.showwarning('Problema na configuração',
                 errMsg)
@@ -2074,12 +2103,16 @@ class ClassifySemiRegularDialog(Dialog):
         numIterations = self.numIterations.get()
         randSeed = self.randSeed.get()
         spreadIteration = self.spreadIteration.get()
+        initialChoicePb = self.initialChoicePb.get()
+        deltaChoicePb = self.deltaChoicePb.get()
 
         # Atualizando os valores default
         ClassifySemiRegularDialog.NUM_ITER = numIterations
         ClassifySemiRegularDialog.RAND_SEED = randSeed
         ClassifySemiRegularDialog.NUM_CLASSES = numClasses
         ClassifySemiRegularDialog.SPREAD_ITER = spreadIteration
+        ClassifySemiRegularDialog.INITIAL_CHOICE_PB = initialChoicePb
+        ClassifySemiRegularDialog.DELTA_CHOICE_PB = deltaChoicePb
 
         if randSeed == -1:
             randSeed=None
@@ -2091,7 +2124,9 @@ class ClassifySemiRegularDialog(Dialog):
                 numClasses=numClasses,
                 numIterations=numIterations,
                 randSeed=randSeed,
-                spreadIteration=spreadIteration)
+                spreadIteration=spreadIteration,
+                initialChoicePb=initialChoicePb,
+                deltaChoicePb=deltaChoicePb)
 
         gui.ExecutionDialog(master=self.master, command=execute,
                 logger=self.control.logger)
