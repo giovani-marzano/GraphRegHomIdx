@@ -646,7 +646,7 @@ class GraphAppControl(object):
 
     def classifySemiRegular(self, graphName, classAttr, numClasses,
             numIterations, allClassFileName=None, bestClassFileName=None,
-            randSeed=None, spreadIteration=0, initialChoicePb=0.5,
+            randSeed=None, initialChoicePb=1.0,
             deltaChoicePb=0.05):
 
         if graphName not in self.graphModels.keys():
@@ -656,26 +656,28 @@ class GraphAppControl(object):
         gmod = self.graphModels[graphName]
 
         spec = gr.AttrSpec(classAttr, 'int')
+        spec_last = gr.AttrSpec(classAttr+'_last', 'int')
 
-        isOk, errMsg = self.validateNewAttrs(gmod, [spec], 'node')
+        isOk, errMsg = self.validateNewAttrs(gmod, [spec, spec_last], 'node')
         if not isOk:
             raise KeyError("'classAttr' inválido. " + errMsg)
+
+        random.seed(randSeed)
+
+        semiRegHom.toolbox.initialChoicePb = initialChoicePb
+        semiRegHom.toolbox.deltaChoicePb = deltaChoicePb
 
         visitor = KSemiRegClassVisitor(self.logger,
                 bestClassFileName=bestClassFileName,
                 classFileName=allClassFileName)
-
-        random.seed(randSeed)
-
-        semiRegHom.toolbox.spreadIteration = spreadIteration
-        semiRegHom.toolbox.initialChoicePb = initialChoicePb
-        semiRegHom.toolbox.deltaChoicePb = deltaChoicePb
 
         with visitor as v:
             ksemiRegularClass(gmod.graph, numClasses, numIterations, v)
 
         gmod.graph.addNodeAttrSpec(spec)
         gmod.graph.setNodeAttrFromDict(spec.name, v.bestNodeClass)
+        gmod.graph.addNodeAttrSpec(spec_last)
+        gmod.graph.setNodeAttrFromDict(spec_last.name, v.lastNodeClass)
 
         self._callChangeHandlers(gmod)
 
@@ -1951,11 +1953,10 @@ class ClassifyRegularEquivDialog(Dialog):
                 logger=self.control.logger)
 
 class ClassifySemiRegularDialog(Dialog):
-    SPREAD_ITER = 0
     RAND_SEED = -1
     NUM_CLASSES = 5
     NUM_ITER = 10
-    INITIAL_CHOICE_PB = 0.5
+    INITIAL_CHOICE_PB = 1.0
     MIN_CHOICE_PB = 0.1
     DELTA_CHOICE_PB = 0.05
 
@@ -1972,8 +1973,6 @@ class ClassifySemiRegularDialog(Dialog):
         self.numIterations.set(ClassifySemiRegularDialog.NUM_ITER)
         self.randSeed = tk.IntVar()
         self.randSeed.set(ClassifySemiRegularDialog.RAND_SEED)
-        self.spreadIteration = tk.IntVar()
-        self.spreadIteration.set(ClassifySemiRegularDialog.SPREAD_ITER)
         self.initialChoicePb = tk.DoubleVar()
         self.initialChoicePb.set(ClassifySemiRegularDialog.INITIAL_CHOICE_PB)
         self.deltaChoicePb = tk.DoubleVar()
@@ -2038,13 +2037,6 @@ class ClassifySemiRegularDialog(Dialog):
                 from_=-1, to=100, increment=1)
         row = gridLabelAndWidgets(row, labelwidth, lb, spin)
 
-        lb = ttk.Label(master,
-            text='Iteração para distanciar padrão das classes:',
-            justify=tk.RIGHT, anchor=tk.E)
-        spin = tk.Spinbox(master, textvariable=self.spreadIteration,
-                from_=-1, to=100, increment=1)
-        row = gridLabelAndWidgets(row, labelwidth, lb, spin)
-
         self._updateButtonStates()
 
         master.pack(fill='both', expand=True)
@@ -2102,7 +2094,6 @@ class ClassifySemiRegularDialog(Dialog):
         numClasses = self.numClasses.get()
         numIterations = self.numIterations.get()
         randSeed = self.randSeed.get()
-        spreadIteration = self.spreadIteration.get()
         initialChoicePb = self.initialChoicePb.get()
         deltaChoicePb = self.deltaChoicePb.get()
 
@@ -2110,7 +2101,6 @@ class ClassifySemiRegularDialog(Dialog):
         ClassifySemiRegularDialog.NUM_ITER = numIterations
         ClassifySemiRegularDialog.RAND_SEED = randSeed
         ClassifySemiRegularDialog.NUM_CLASSES = numClasses
-        ClassifySemiRegularDialog.SPREAD_ITER = spreadIteration
         ClassifySemiRegularDialog.INITIAL_CHOICE_PB = initialChoicePb
         ClassifySemiRegularDialog.DELTA_CHOICE_PB = deltaChoicePb
 
@@ -2124,7 +2114,6 @@ class ClassifySemiRegularDialog(Dialog):
                 numClasses=numClasses,
                 numIterations=numIterations,
                 randSeed=randSeed,
-                spreadIteration=spreadIteration,
                 initialChoicePb=initialChoicePb,
                 deltaChoicePb=deltaChoicePb)
 

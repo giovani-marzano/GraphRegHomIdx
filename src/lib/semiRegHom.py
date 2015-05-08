@@ -83,31 +83,43 @@ class KSemiRegClassVisitor(object):
         self._bestClassFile = None
 
         self.bestRegIdx = 0.0
+        self.bestRank = 0.0
         self.bestNodeClass = {}
+
+        self.lastRegIdx = 0.0
+        self.lastRank = 0.0
+        self.lastNodeClass = {}
 
     def begining(self, g, k, iMax):
         self.logger.info(
             "BEGIN ksemiRegularClass: {0} classes {1} iterations".format(
                 k, iMax))
 
-    def iteration(self, g, i, nodeClass, clsPatterns):
+    def iteration(self, g, i, nodeClass, clsPatterns, rank):
         regStats = gr.fullMorphismStats(g, _createNodeClsF(nodeClass), _edgeClsF)
         edgeStats = gr.calcPreRegIdxStats(*regStats)
         graphRegIdx = gr.calcGraphRegIdx(edgeStats)
-        self.logger.info("Iter {0} {1:.4f} {2:.4f} {3:.4f}".format(i,
-                    graphRegIdx.ri, graphRegIdx.sri, graphRegIdx.tri))
+        self.logger.info("Iter {0} {1:.4f} {2:.4f} {3:.4f} {4:.4f}".format(i,
+                    graphRegIdx.ri, graphRegIdx.sri, graphRegIdx.tri, rank))
         self._writeClasses(i, nodeClass)
 
-        if self.logger.isEnabledFor(logging.DEBUG):
-            self.logClassSimilarities(clsPatterns)
+        # if self.logger.isEnabledFor(logging.DEBUG):
+        #    self.logClassSimilarities(clsPatterns)
+
+        self.lastRegIdx = graphRegIdx.ri
+        self.lastNodeClass = nodeClass
+        self.lastRank = rank
 
         if graphRegIdx.ri >= self.bestRegIdx:
             self.bestRegIdx = graphRegIdx.ri
             self.bestNodeClass = nodeClass
+            self.bestRank = rank
 
     def ending(self):
-        self.logger.info(
-            'END ksemiRegularClass: best {0:.4f}'.format(self.bestRegIdx))
+        msg = ('END: best {0:.4f} {1:.4f} ' +
+               'last {2:.4f} {3:.4f}').format(self.bestRegIdx, self.bestRank,
+               self.lastRegIdx, self.lastRank)
+        self.logger.info(msg)
         self._writeBestClasses()
 
     def logClassSimilarities(self, clsPatterns):
@@ -231,8 +243,7 @@ def _genNodesPatterns(g, nodeClass, patternToIdx):
         yield (node, vet, hasEdge)
 
 class Toolbox(object):
-    def __init__(self, spreadIteration=0):
-        self.spreadIteration=0
+    def __init__(self):
 
         # Probabilidade de escolher a melhor classe
         self.initialChoicePb = 1.0
@@ -263,7 +274,12 @@ class Toolbox(object):
         for clsPat in clsPatterns:
             normalizeVet(clsPat)
 
-        if iNum == self.spreadIteration:
+        if iNum == 0:
+            # Na primeira iteração, os nodos estão aleatoriamente distribuídos
+            # nas classes. Isto faz com que os vetores das classes fiquem muito
+            # próximos neste primeiro momento, dificultando a separação dos
+            # nodos. Para evitar isso forçamos uma diferenciação dos vetores das
+            # classes neste momento
             _spreadPatterns(clsPatterns)
 
 
@@ -273,25 +289,40 @@ class Toolbox(object):
         self.atualizeChoicePb(iNum)
 
         newNodeClass = {}
+        totalRank = 0.0
+        countNodes = 0
         for node, vet, hasEdge in _genNodesPatterns(g, nodeClass, patternToIdx):
             # escolhendo nova classe para o nodo
             newCls = -1
             if hasEdge:
+                normalizeVet(vet)
                 rankHeap = []
                 for cls, clsVet in enumerate(clsPatterns):
                     # produto vetorial
                     rank = vetDotProduct(vet, clsVet)
                     heapq.heappush(rankHeap,(-rank, cls))
                 while len(rankHeap) > 1:
-                    _, cls = heapq.heappop(rankHeap)
+                    rank, cls = heapq.heappop(rankHeap)
                     if random.random() < self.choicePb:
                         newCls = cls
                         break
                 if newCls < 0:
-                    _, newCls = heapq.heappop(rankHeap)
+                    rank, newCls = heapq.heappop(rankHeap)
+
+                # Acumulando os ranks, estamos subtraindo pois o rank foi
+                # invertido para servir de chave na heap mínima
+                totalRank -= rank
+
+                # Contabilizamos apenas os nodos que possuem arestas, os que não
+                # possuem serão agrupados no grupo -1
+                countNodes += 1
 
             newNodeClass[node] = newCls
-        return newNodeClass
+
+        if countNodes > 0:
+            totalRank = totalRank/countNodes
+
+        return newNodeClass, totalRank
 
 toolbox = Toolbox()
 
@@ -337,19 +368,14 @@ def ksemiRegularClass(g, k, iMax, visitor, toolbox=toolbox):
         clsPatterns.append(pattVet)
 
     visitor.begining(g, k, iMax)
-
     for iNum in range(iMax):
         # Atualizando os vetores de padrao de conexão das classes
         toolbox.actualizeClassPatterns(g, iNum, nodeClass, clsPatterns,
                 patternToIdx)
 
-        visitor.iteration(g, iNum, nodeClass, clsPatterns)
-
-        nodeClass = toolbox.generateNewNodeClass(g, iNum, nodeClass,
+        nodeClass, rank = toolbox.generateNewNodeClass(g, iNum, nodeClass,
                 clsPatterns, patternToIdx)
 
-    # Estatisticas finais
-    visitor.iteration(g, iMax, nodeClass, clsPatterns)
+        visitor.iteration(g, iNum, nodeClass, clsPatterns, rank)
 
     visitor.ending()
-
