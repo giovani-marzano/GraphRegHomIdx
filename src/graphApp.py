@@ -644,9 +644,15 @@ class GraphAppControl(object):
         if changed:
             self._callChangeHandlers(gmod)
 
-    def classifySemiRegular(self, graphName, classAttr, numClasses,
+    def createSemiRegularClassAttrSpecs(self, classAttrPrefix):
+        spec = gr.AttrSpec(classAttrPrefix+'_regIdx', 'int')
+        spec_rank = gr.AttrSpec(classAttrPrefix+'_rank', 'int')
+
+        return spec, spec_rank
+
+    def classifySemiRegular(self, graphName, classAttrPrefix, numClasses,
             numIterations, allClassFileName=None, bestClassFileName=None,
-            randSeed=None, initialChoicePb=1.0,
+            randSeed=None, initialChoicePb=1.0, doClassSpread=True,
             deltaChoicePb=0.05):
 
         if graphName not in self.graphModels.keys():
@@ -655,17 +661,17 @@ class GraphAppControl(object):
 
         gmod = self.graphModels[graphName]
 
-        spec = gr.AttrSpec(classAttr, 'int')
-        spec_last = gr.AttrSpec(classAttr+'_last', 'int')
+        spec, spec_rank = self.createSemiRegularClassAttrSpecs(classAttrPrefix)
 
-        isOk, errMsg = self.validateNewAttrs(gmod, [spec, spec_last], 'node')
+        isOk, errMsg = self.validateNewAttrs(gmod, [spec, spec_rank], 'node')
         if not isOk:
-            raise KeyError("'classAttr' inválido. " + errMsg)
+            raise KeyError("'classAttrPrefix' inválido. " + errMsg)
 
         random.seed(randSeed)
 
         semiRegHom.toolbox.initialChoicePb = initialChoicePb
         semiRegHom.toolbox.deltaChoicePb = deltaChoicePb
+        semiRegHom.toolbox.doClassSpread = doClassSpread
 
         visitor = KSemiRegClassVisitor(self.logger,
                 bestClassFileName=bestClassFileName,
@@ -675,9 +681,9 @@ class GraphAppControl(object):
             ksemiRegularClass(gmod.graph, numClasses, numIterations, v)
 
         gmod.graph.addNodeAttrSpec(spec)
-        gmod.graph.setNodeAttrFromDict(spec.name, v.bestNodeClass)
-        gmod.graph.addNodeAttrSpec(spec_last)
-        gmod.graph.setNodeAttrFromDict(spec_last.name, v.lastNodeClass)
+        gmod.graph.setNodeAttrFromDict(spec.name, v.bestRegIdxNodeClass)
+        gmod.graph.addNodeAttrSpec(spec_rank)
+        gmod.graph.setNodeAttrFromDict(spec_rank.name, v.bestRankNodeClass)
 
         self._callChangeHandlers(gmod)
 
@@ -1959,6 +1965,7 @@ class ClassifySemiRegularDialog(Dialog):
     INITIAL_CHOICE_PB = 1.0
     MIN_CHOICE_PB = 0.1
     DELTA_CHOICE_PB = 0.05
+    DO_CLASS_SPREAD = True
 
     def __init__(self, master, control, selectedGraph=''):
 
@@ -1977,6 +1984,8 @@ class ClassifySemiRegularDialog(Dialog):
         self.initialChoicePb.set(ClassifySemiRegularDialog.INITIAL_CHOICE_PB)
         self.deltaChoicePb = tk.DoubleVar()
         self.deltaChoicePb.set(ClassifySemiRegularDialog.DELTA_CHOICE_PB)
+        self.doClassSpread = tk.BooleanVar()
+        self.doClassSpread.set(ClassifySemiRegularDialog.DO_CLASS_SPREAD)
 
         if selectedGraph:
             self._setGraphName(selectedGraph)
@@ -1997,7 +2006,7 @@ class ClassifySemiRegularDialog(Dialog):
                 command=self._doBtnChooseGraph)
         row = gridLabelAndWidgets(row, labelwidth, lb, entry, btn)
 
-        lb = ttk.Label(master, text='Atributo para a classe gerada:',
+        lb = ttk.Label(master, text='Prefixo para atributos de classe gerados:',
                 justify=tk.RIGHT, anchor=tk.E)
         entry = ttk.Entry(master, textvariable=self.classAttr)
         row = gridLabelAndWidgets(row, labelwidth, lb, entry)
@@ -2017,6 +2026,20 @@ class ClassifySemiRegularDialog(Dialog):
         row = gridLabelAndWidgets(row, labelwidth, lb, spin)
 
         lb = ttk.Label(master,
+            text='Random seed:',
+            justify=tk.RIGHT, anchor=tk.E)
+        spin = tk.Spinbox(master, textvariable=self.randSeed,
+                from_=-1, to=100, increment=1)
+        row = gridLabelAndWidgets(row, labelwidth, lb, spin)
+
+        checkBt = ttk.Checkbutton(master, variable=self.doClassSpread)
+        checkBt.grid(row=row, column=0, sticky=tk.E)
+        lb = ttk.Label(master, text=':Forçar disperção das classes iniciais.',
+                justify=tk.LEFT, anchor=tk.W)
+        lb.grid(row=row, column=1, columnspan=2, sticky=tk.EW)
+        row += 1
+
+        lb = ttk.Label(master,
             text='Probabilidade inicial:',
             justify=tk.RIGHT, anchor=tk.E)
         spin = tk.Spinbox(master, textvariable=self.initialChoicePb,
@@ -2028,13 +2051,6 @@ class ClassifySemiRegularDialog(Dialog):
             justify=tk.RIGHT, anchor=tk.E)
         spin = tk.Spinbox(master, textvariable=self.deltaChoicePb,
                 from_=0.0, to=1.0, increment=0.05)
-        row = gridLabelAndWidgets(row, labelwidth, lb, spin)
-
-        lb = ttk.Label(master,
-            text='Random seed:',
-            justify=tk.RIGHT, anchor=tk.E)
-        spin = tk.Spinbox(master, textvariable=self.randSeed,
-                from_=-1, to=100, increment=1)
         row = gridLabelAndWidgets(row, labelwidth, lb, spin)
 
         self._updateButtonStates()
@@ -2073,9 +2089,9 @@ class ClassifySemiRegularDialog(Dialog):
             errMsg = 'O nome do atributo de classe a ser criado não foi configurado!'
 
         if isOk:
-            spec = gr.AttrSpec(className, 'int')
+            specs = self.control.createSemiRegularClassAttrSpecs(className)
             isOk, errMsg = self.control.validateNewAttrs(self.graphName.get(),
-            [spec], 'node')
+            specs, 'node')
 
         if isOk and self.initialChoicePb.get() < self.MIN_CHOICE_PB:
             isOk = False
@@ -2096,6 +2112,7 @@ class ClassifySemiRegularDialog(Dialog):
         randSeed = self.randSeed.get()
         initialChoicePb = self.initialChoicePb.get()
         deltaChoicePb = self.deltaChoicePb.get()
+        doClassSpread = self.doClassSpread.get()
 
         # Atualizando os valores default
         ClassifySemiRegularDialog.NUM_ITER = numIterations
@@ -2103,6 +2120,7 @@ class ClassifySemiRegularDialog(Dialog):
         ClassifySemiRegularDialog.NUM_CLASSES = numClasses
         ClassifySemiRegularDialog.INITIAL_CHOICE_PB = initialChoicePb
         ClassifySemiRegularDialog.DELTA_CHOICE_PB = deltaChoicePb
+        ClassifySemiRegularDialog.DO_CLASS_SPREAD = doClassSpread
 
         if randSeed == -1:
             randSeed=None
@@ -2110,12 +2128,13 @@ class ClassifySemiRegularDialog(Dialog):
         def execute():
             self.control.classifySemiRegular(
                 graphName=graphName,
-                classAttr=classAttr,
+                classAttrPrefix=classAttr,
                 numClasses=numClasses,
                 numIterations=numIterations,
                 randSeed=randSeed,
                 initialChoicePb=initialChoicePb,
-                deltaChoicePb=deltaChoicePb)
+                deltaChoicePb=deltaChoicePb,
+                doClassSpread=doClassSpread)
 
         gui.ExecutionDialog(master=self.master, command=execute,
                 logger=self.control.logger)

@@ -66,8 +66,12 @@ class KSemiRegClassVisitor(object):
 
     Atributos:
 
-    - bestNodeClass: Dicionário com a melhor classificação de nodos encontrada.
-      É None se o algoritmo não tiver rodado ainda.
+    - bestRegIdxNodeClass: Dicionário com a melhor classificação de nodos
+      encontrada de acordo com o índice de regularidade. É None se o algoritmo
+      não tiver rodado ainda.
+    - bestRankNodeClass: Dicionário com a melhor classificação de nodos
+      encontrada de acordo com o rank. É None se o algoritmo não tiver rodado
+      ainda.
     - bestRegIdx: Índice de regularidade de grafo da melhor classificação.
 
     """
@@ -83,12 +87,12 @@ class KSemiRegClassVisitor(object):
         self._bestClassFile = None
 
         self.bestRegIdx = 0.0
-        self.bestRank = 0.0
-        self.bestNodeClass = {}
+        self.bestRegIdxRank = 0.0
+        self.bestRegIdxNodeClass = {}
 
-        self.lastRegIdx = 0.0
-        self.lastRank = 0.0
-        self.lastNodeClass = {}
+        self.bestRank = 0.0
+        self.bestRankRegIdx = 0.0
+        self.bestRankNodeClass = {}
 
     def begining(self, g, k, iMax):
         self.logger.info(
@@ -106,19 +110,22 @@ class KSemiRegClassVisitor(object):
         # if self.logger.isEnabledFor(logging.DEBUG):
         #    self.logClassSimilarities(clsPatterns)
 
-        self.lastRegIdx = graphRegIdx.ri
-        self.lastNodeClass = nodeClass
-        self.lastRank = rank
-
         if graphRegIdx.ri >= self.bestRegIdx:
             self.bestRegIdx = graphRegIdx.ri
-            self.bestNodeClass = nodeClass
+            self.bestRegIdxNodeClass = nodeClass
+            self.bestRegIdxRank = rank
+
+        if rank >= self.bestRank:
             self.bestRank = rank
+            self.bestRankRegIdx = graphRegIdx.ri
+            self.bestRankNodeClass = nodeClass
 
     def ending(self):
-        msg = ('END: best {0:.4f} {1:.4f} ' +
-               'last {2:.4f} {3:.4f}').format(self.bestRegIdx, self.bestRank,
-               self.lastRegIdx, self.lastRank)
+        msg = 'Best by RI  : RI {0:.4f} Rank {1:.4f}'.format(self.bestRegIdx,
+                self.bestRegIdxRank)
+        self.logger.info(msg)
+        msg = 'Best by Rank: RI {0:.4f} Rank {1:.4f}'.format(
+                self.bestRankRegIdx, self.bestRank)
         self.logger.info(msg)
         self._writeBestClasses()
 
@@ -163,9 +170,10 @@ class KSemiRegClassVisitor(object):
 
     def _writeBestClasses(self):
         if self._bestClassFile:
-            self._bestClassFile.write('node\tclass\n')
-            for node, cls in self.bestNodeClass.items():
-                self._bestClassFile.write('{0}\t{1}\n'.format(node, cls))
+            self._bestClassFile.write('node\tclass_regIdx\tclass_rank\n')
+            for node, cls in self.bestRegIdxNodeClass.items():
+                self._bestClassFile.write('{0}\t{1}\t{2}\n'.format(node, cls,
+                    self.bestRankNodeClass[node]))
 
 def _createNodeClsF(nodeClass):
     def nodeClsF(node):
@@ -208,7 +216,7 @@ def _spreadPatterns(clsPatterns):
             wp = vetDotProduct(v1,v2)
             vp = map(lambda x: wp*x, v2)
             for i, x in enumerate(vp):
-                v1[i] -= x
+                v1[i] = v1[i] - x
             normalizeVet(v1)
 
 def _genNodesPatterns(g, nodeClass, patternToIdx):
@@ -245,6 +253,8 @@ def _genNodesPatterns(g, nodeClass, patternToIdx):
 class Toolbox(object):
     def __init__(self):
 
+        self.doClassSpread = True
+
         # Probabilidade de escolher a melhor classe
         self.initialChoicePb = 1.0
         self.choicePb = 1.0
@@ -274,7 +284,7 @@ class Toolbox(object):
         for clsPat in clsPatterns:
             normalizeVet(clsPat)
 
-        if iNum == 0:
+        if iNum == 0 and self.doClassSpread:
             # Na primeira iteração, os nodos estão aleatoriamente distribuídos
             # nas classes. Isto faz com que os vetores das classes fiquem muito
             # próximos neste primeiro momento, dificultando a separação dos
