@@ -652,8 +652,8 @@ class GraphAppControl(object):
 
     def classifySemiRegular(self, graphName, classAttrPrefix, numClasses,
             numIterations, allClassFileName=None, bestClassFileName=None,
-            randSeed=None, initialChoicePb=1.0, doClassSpread=True,
-            deltaChoicePb=0.05):
+            randSeed=None, doClassSpread=True,
+            initPb=1.0, finalPb=1.0, incStartT=0, incStopT=1):
 
         if graphName not in self.graphModels.keys():
             raise KeyError(
@@ -669,16 +669,17 @@ class GraphAppControl(object):
 
         random.seed(randSeed)
 
-        semiRegHom.toolbox.initialChoicePb = initialChoicePb
-        semiRegHom.toolbox.deltaChoicePb = deltaChoicePb
-        semiRegHom.toolbox.doClassSpread = doClassSpread
+        toolbox = semiRegHom.Toolbox()
+        toolbox.doClassSpread = doClassSpread
+        toolbox.configPbSchedule(initPb, finalPb, incStartT, incStopT)
 
         visitor = KSemiRegClassVisitor(self.logger,
                 bestClassFileName=bestClassFileName,
                 classFileName=allClassFileName)
 
         with visitor as v:
-            ksemiRegularClass(gmod.graph, numClasses, numIterations, v)
+            ksemiRegularClass(gmod.graph, numClasses, numIterations,
+                visitor=v, toolbox=toolbox)
 
         gmod.graph.addNodeAttrSpec(spec)
         gmod.graph.setNodeAttrFromDict(spec.name, v.bestRegIdxNodeClass)
@@ -1966,6 +1967,10 @@ class ClassifySemiRegularDialog(Dialog):
     MIN_CHOICE_PB = 0.1
     DELTA_CHOICE_PB = 0.05
     DO_CLASS_SPREAD = True
+    INIT_PB = 1.0
+    FINAL_PB = 1.0
+    INC_START_T = 0
+    INC_STOP_T = 1
 
     def __init__(self, master, control, selectedGraph=''):
 
@@ -1980,12 +1985,16 @@ class ClassifySemiRegularDialog(Dialog):
         self.numIterations.set(ClassifySemiRegularDialog.NUM_ITER)
         self.randSeed = tk.IntVar()
         self.randSeed.set(ClassifySemiRegularDialog.RAND_SEED)
-        self.initialChoicePb = tk.DoubleVar()
-        self.initialChoicePb.set(ClassifySemiRegularDialog.INITIAL_CHOICE_PB)
-        self.deltaChoicePb = tk.DoubleVar()
-        self.deltaChoicePb.set(ClassifySemiRegularDialog.DELTA_CHOICE_PB)
         self.doClassSpread = tk.BooleanVar()
         self.doClassSpread.set(ClassifySemiRegularDialog.DO_CLASS_SPREAD)
+        self.initPb = tk.DoubleVar()
+        self.initPb.set(ClassifySemiRegularDialog.INIT_PB)
+        self.finalPb = tk.DoubleVar()
+        self.finalPb.set(ClassifySemiRegularDialog.FINAL_PB)
+        self.incStartT = tk.IntVar()
+        self.incStartT.set(ClassifySemiRegularDialog.INC_START_T)
+        self.incStopT = tk.IntVar()
+        self.incStopT.set(ClassifySemiRegularDialog.INC_STOP_T)
 
         if selectedGraph:
             self._setGraphName(selectedGraph)
@@ -2022,7 +2031,7 @@ class ClassifySemiRegularDialog(Dialog):
             text='Número de iterações:',
             justify=tk.RIGHT, anchor=tk.E)
         spin = tk.Spinbox(master, textvariable=self.numIterations,
-                from_=1, to=100, increment=1)
+                from_=1, to=1000, increment=1)
         row = gridLabelAndWidgets(row, labelwidth, lb, spin)
 
         lb = ttk.Label(master,
@@ -2032,26 +2041,40 @@ class ClassifySemiRegularDialog(Dialog):
                 from_=-1, to=100, increment=1)
         row = gridLabelAndWidgets(row, labelwidth, lb, spin)
 
+        lb = ttk.Label(master,
+            text='Probabilidade inicial:',
+            justify=tk.RIGHT, anchor=tk.E)
+        spin = tk.Spinbox(master, textvariable=self.initPb,
+                from_=0.1, to=1.0, increment=0.05)
+        row = gridLabelAndWidgets(row, labelwidth, lb, spin)
+
+        lb = ttk.Label(master,
+            text='Probabilidade final:',
+            justify=tk.RIGHT, anchor=tk.E)
+        spin = tk.Spinbox(master, textvariable=self.finalPb,
+                from_=0.1, to=1.0, increment=0.05)
+        row = gridLabelAndWidgets(row, labelwidth, lb, spin)
+
+        lb = ttk.Label(master,
+            text='Iteração em que a probabilidade começa a crescer:',
+            justify=tk.RIGHT, anchor=tk.E)
+        spin = tk.Spinbox(master, textvariable=self.incStartT,
+                from_=0, to=1000, increment=1)
+        row = gridLabelAndWidgets(row, labelwidth, lb, spin)
+
+        lb = ttk.Label(master,
+            text='Iteração em que a probabilidade atinge seu valor final:',
+            justify=tk.RIGHT, anchor=tk.E)
+        spin = tk.Spinbox(master, textvariable=self.incStopT,
+                from_=1, to=1000, increment=1)
+        row = gridLabelAndWidgets(row, labelwidth, lb, spin)
+
         checkBt = ttk.Checkbutton(master, variable=self.doClassSpread)
         checkBt.grid(row=row, column=0, sticky=tk.E)
         lb = ttk.Label(master, text=':Forçar disperção das classes iniciais.',
                 justify=tk.LEFT, anchor=tk.W)
         lb.grid(row=row, column=1, columnspan=2, sticky=tk.EW)
         row += 1
-
-        lb = ttk.Label(master,
-            text='Probabilidade inicial:',
-            justify=tk.RIGHT, anchor=tk.E)
-        spin = tk.Spinbox(master, textvariable=self.initialChoicePb,
-                from_=self.MIN_CHOICE_PB, to=1.0, increment=0.05)
-        row = gridLabelAndWidgets(row, labelwidth, lb, spin)
-
-        lb = ttk.Label(master,
-            text='Incremento de probabilidade:',
-            justify=tk.RIGHT, anchor=tk.E)
-        spin = tk.Spinbox(master, textvariable=self.deltaChoicePb,
-                from_=0.0, to=1.0, increment=0.05)
-        row = gridLabelAndWidgets(row, labelwidth, lb, spin)
 
         self._updateButtonStates()
 
@@ -2093,10 +2116,16 @@ class ClassifySemiRegularDialog(Dialog):
             isOk, errMsg = self.control.validateNewAttrs(self.graphName.get(),
             specs, 'node')
 
-        if isOk and self.initialChoicePb.get() < self.MIN_CHOICE_PB:
-            isOk = False
-            errMsg = 'A probabilidade inicial deve ser maior ou igual a {0}'
-            errMsg = errMsg.format(self.MIN_CHOICE_PB)
+        if isOk:
+            tb = semiRegHom.Toolbox()
+            try:
+                tb.configPbSchedule(initPb=self.initPb.get(),
+                        finalPb=self.finalPb.get(),
+                        incStartT=self.incStartT.get(),
+                        incStopT=self.incStopT.get())
+            except ValueError as ex:
+                errMsg = str(ex)
+                isOk = False
 
         if not isOk:
             tk.messagebox.showwarning('Problema na configuração',
@@ -2110,17 +2139,21 @@ class ClassifySemiRegularDialog(Dialog):
         numClasses = self.numClasses.get()
         numIterations = self.numIterations.get()
         randSeed = self.randSeed.get()
-        initialChoicePb = self.initialChoicePb.get()
-        deltaChoicePb = self.deltaChoicePb.get()
         doClassSpread = self.doClassSpread.get()
+        initPb = self.initPb.get()
+        finalPb = self.finalPb.get()
+        incStartT = self.incStartT.get()
+        incStopT = self.incStopT.get()
 
         # Atualizando os valores default
         ClassifySemiRegularDialog.NUM_ITER = numIterations
         ClassifySemiRegularDialog.RAND_SEED = randSeed
         ClassifySemiRegularDialog.NUM_CLASSES = numClasses
-        ClassifySemiRegularDialog.INITIAL_CHOICE_PB = initialChoicePb
-        ClassifySemiRegularDialog.DELTA_CHOICE_PB = deltaChoicePb
         ClassifySemiRegularDialog.DO_CLASS_SPREAD = doClassSpread
+        ClassifySemiRegularDialog.INIT_PB = initPb
+        ClassifySemiRegularDialog.FINAL_PB = finalPb
+        ClassifySemiRegularDialog.INC_START_T = incStartT
+        ClassifySemiRegularDialog.INC_STOP_T = incStopT
 
         if randSeed == -1:
             randSeed=None
@@ -2132,9 +2165,10 @@ class ClassifySemiRegularDialog(Dialog):
                 numClasses=numClasses,
                 numIterations=numIterations,
                 randSeed=randSeed,
-                initialChoicePb=initialChoicePb,
-                deltaChoicePb=deltaChoicePb,
-                doClassSpread=doClassSpread)
+                doClassSpread=doClassSpread,
+                initPb=initPb, finalPb=finalPb,
+                incStartT=incStartT, incStopT=incStopT
+                )
 
         gui.ExecutionDialog(master=self.master, command=execute,
                 logger=self.control.logger)

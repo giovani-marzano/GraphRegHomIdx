@@ -256,15 +256,56 @@ class Toolbox(object):
         self.doClassSpread = True
 
         # Probabilidade de escolher a melhor classe
-        self.initialChoicePb = 1.0
-        self.choicePb = 1.0
-        self.deltaChoicePb = 0.05
+        self._initPb = 1.0
+        self._finalPb = 1.0
+        self._incStartT = 0
+        self._incStopT = 1
 
-    def atualizeChoicePb(self, iNum):
-        if iNum > 0:
-            self.choicePb = min(self.choicePb + self.deltaChoicePb, 1.0)
+    def configPbSchedule(self, initPb, finalPb, incStartT, incStopT):
+        """Configure the propability change schedule.
+
+        Args:
+
+        - initPb: Initial probability.
+        - finalPb: Final probability.
+        - incStartT: Time (iteration) to start a linear increasing of the
+          probability toward finalPb.
+        - incStopT: Time (iteration) that the probability should reach the
+          finalPb.
+        """
+        if initPb < 0.0 or initPb > 1.0:
+            raise ValueError(
+                'initPb ({0}) must be in [0.0, 1.0] interval.'.format(finalPb))
+
+        if finalPb < 0.0 or finalPb > 1.0:
+            raise ValueError(
+                'finalPb ({0}) must be in [0.0, 1.0] interval.'.format(finalPb))
+
+        if finalPb < initPb:
+            raise ValueError(
+                'finalPb ({0}) smaller then initPb ({1})'.format(finalPb,
+                    initPb))
+
+        if incStopT <= incStartT:
+            raise ValueError(
+                'incStopT ({0}) must be greater then incStartT ({1})'.format(
+                    incStopT, incStartT))
+
+        self._initPb = initPb
+        self._finalPb = initPb
+        self._incStartT = incStartT
+        self._incStopT = incStopT
+
+    def calcChoicePb(self, iNum):
+        if iNum < self._incStartT:
+            choicePb = self._initPb
+        elif iNum > self._incStopT:
+            choicePb = self._finalPb
         else:
-            self.choicePb = self.initialChoicePb
+            a = (self._finalPb - self._initPb)
+            a = a/(self._incStopT - self._incStartT)
+            choicePb = self._initPb + a*iNum
+        return choicePb
 
     def generateInitialNodeClass(self, g, k):
         return {n: random.randrange(k) for n in g.nodes()}
@@ -296,7 +337,7 @@ class Toolbox(object):
     def generateNewNodeClass(self, g, iNum, nodeClass, clsPatterns,
             patternToIdx):
 
-        self.atualizeChoicePb(iNum)
+        choicePb = self.calcChoicePb(iNum)
 
         newNodeClass = {}
         totalRank = 0.0
@@ -313,7 +354,7 @@ class Toolbox(object):
                     heapq.heappush(rankHeap,(-rank, cls))
                 while len(rankHeap) > 1:
                     rank, cls = heapq.heappop(rankHeap)
-                    if random.random() < self.choicePb:
+                    if random.random() < choicePb:
                         newCls = cls
                         break
                 if newCls < 0:
