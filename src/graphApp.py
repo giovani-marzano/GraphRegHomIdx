@@ -653,7 +653,8 @@ class GraphAppControl(object):
     def classifySemiRegular(self, graphName, classAttrPrefix, numClasses,
             numIterations, allClassFileName=None, bestClassFileName=None,
             randSeed=None, doClassSpread=True,
-            initPb=1.0, finalPb=1.0, incStartT=0, incStopT=1):
+            initPb=1.0, finalPb=1.0, incStartT=0, incStopT=1,
+            nodeAlfa=1.0, spreadAlfa=0.0):
 
         if graphName not in self.graphModels.keys():
             raise KeyError(
@@ -671,6 +672,8 @@ class GraphAppControl(object):
 
         toolbox = semiRegHom.Toolbox()
         toolbox.doClassSpread = doClassSpread
+        toolbox.nodeAlfa = nodeAlfa
+        toolbox.spreadAlfa = spreadAlfa
         toolbox.configPbSchedule(initPb, finalPb, incStartT, incStopT)
 
         visitor = KSemiRegClassVisitor(self.logger,
@@ -1971,6 +1974,8 @@ class ClassifySemiRegularDialog(Dialog):
     FINAL_PB = 1.0
     INC_START_T = 0
     INC_STOP_T = 1
+    NODE_ALFA = 0.10
+    SPREAD_ALFA = 0.10
 
     def __init__(self, master, control, selectedGraph=''):
 
@@ -1995,6 +2000,10 @@ class ClassifySemiRegularDialog(Dialog):
         self.incStartT.set(ClassifySemiRegularDialog.INC_START_T)
         self.incStopT = tk.IntVar()
         self.incStopT.set(ClassifySemiRegularDialog.INC_STOP_T)
+        self.nodeAlfa = tk.DoubleVar()
+        self.nodeAlfa.set(ClassifySemiRegularDialog.NODE_ALFA)
+        self.spreadAlfa = tk.DoubleVar()
+        self.spreadAlfa.set(ClassifySemiRegularDialog.SPREAD_ALFA)
 
         if selectedGraph:
             self._setGraphName(selectedGraph)
@@ -2042,6 +2051,13 @@ class ClassifySemiRegularDialog(Dialog):
         row = gridLabelAndWidgets(row, labelwidth, lb, spin)
 
         lb = ttk.Label(master,
+            text='Node alfa:',
+            justify=tk.RIGHT, anchor=tk.E)
+        spin = tk.Spinbox(master, textvariable=self.nodeAlfa,
+                from_=0.1, to=1.0, increment=0.05)
+        row = gridLabelAndWidgets(row, labelwidth, lb, spin)
+
+        lb = ttk.Label(master,
             text='Probabilidade inicial:',
             justify=tk.RIGHT, anchor=tk.E)
         spin = tk.Spinbox(master, textvariable=self.initPb,
@@ -2071,10 +2087,17 @@ class ClassifySemiRegularDialog(Dialog):
 
         checkBt = ttk.Checkbutton(master, variable=self.doClassSpread)
         checkBt.grid(row=row, column=0, sticky=tk.E)
-        lb = ttk.Label(master, text=':Forçar disperção das classes iniciais.',
+        lb = ttk.Label(master, text=':Forçar disperção das classes.',
                 justify=tk.LEFT, anchor=tk.W)
         lb.grid(row=row, column=1, columnspan=2, sticky=tk.EW)
         row += 1
+
+        lb = ttk.Label(master,
+            text='Spread alfa:',
+            justify=tk.RIGHT, anchor=tk.E)
+        spin = tk.Spinbox(master, textvariable=self.spreadAlfa,
+                from_=0.1, to=1.0, increment=0.05)
+        row = gridLabelAndWidgets(row, labelwidth, lb, spin)
 
         self._updateButtonStates()
 
@@ -2144,6 +2167,8 @@ class ClassifySemiRegularDialog(Dialog):
         finalPb = self.finalPb.get()
         incStartT = self.incStartT.get()
         incStopT = self.incStopT.get()
+        nodeAlfa = self.nodeAlfa.get()
+        spreadAlfa = self.spreadAlfa.get()
 
         # Atualizando os valores default
         ClassifySemiRegularDialog.NUM_ITER = numIterations
@@ -2154,6 +2179,8 @@ class ClassifySemiRegularDialog(Dialog):
         ClassifySemiRegularDialog.FINAL_PB = finalPb
         ClassifySemiRegularDialog.INC_START_T = incStartT
         ClassifySemiRegularDialog.INC_STOP_T = incStopT
+        ClassifySemiRegularDialog.NODE_ALFA = nodeAlfa
+        ClassifySemiRegularDialog.SPREAD_ALFA = spreadAlfa
 
         if randSeed == -1:
             randSeed=None
@@ -2167,7 +2194,8 @@ class ClassifySemiRegularDialog(Dialog):
                 randSeed=randSeed,
                 doClassSpread=doClassSpread,
                 initPb=initPb, finalPb=finalPb,
-                incStartT=incStartT, incStopT=incStopT
+                incStartT=incStartT, incStopT=incStopT,
+                nodeAlfa=nodeAlfa, spreadAlfa=spreadAlfa
                 )
 
         gui.ExecutionDialog(master=self.master, command=execute,

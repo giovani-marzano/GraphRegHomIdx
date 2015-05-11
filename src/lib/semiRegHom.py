@@ -23,7 +23,6 @@ logger = logging.getLogger(__name__)
 # Constantes para direção da aresta
 IN = 0
 OUT = 1
-AUTO = 2
 
 def normalizeVet(vet):
     """Normaliza o vetor fornecido, aterando-o.
@@ -107,8 +106,8 @@ class KSemiRegClassVisitor(object):
                     graphRegIdx.ri, graphRegIdx.sri, graphRegIdx.tri, rank))
         self._writeClasses(i, nodeClass)
 
-        # if self.logger.isEnabledFor(logging.DEBUG):
-        #    self.logClassSimilarities(clsPatterns)
+        if i == 0:
+            self.logClassSimilarities(clsPatterns)
 
         if graphRegIdx.ri >= self.bestRegIdx:
             self.bestRegIdx = graphRegIdx.ri
@@ -200,24 +199,27 @@ def _actualizeClassPatterns(clsPatterns, patternToIdx, edgeRegIdx):
         idx = patternToIdx[pat]
         clsPatterns[tgt][idx] = regIdx.tri
 
-        # Padrao para auto loops
-        if src == tgt:
-            pat = (rel, AUTO)
-            idx = patternToIdx[pat]
-            clsPatterns[src][idx] = regIdx.ri
-
     for vet in clsPatterns:
         normalizeVet(vet)
 
-def _spreadPatterns(clsPatterns):
-    for c1, v1 in enumerate(clsPatterns):
-        for c2, v2 in enumerate(clsPatterns):
-            if c1 == c2: continue
+def _spreadPatterns(clsPatterns, alfa):
+    spreadPatterns = []
+    for pat in clsPatterns:
+        spreadPatterns.append(list(pat))
+        
+    for c1, v1 in enumerate(spreadPatterns):
+        for c2 in range(c1):
+            v2 = spreadPatterns[c2]
             wp = vetDotProduct(v1,v2)
             vp = map(lambda x: wp*x, v2)
             for i, x in enumerate(vp):
                 v1[i] = v1[i] - x
             normalizeVet(v1)
+
+    for c, pat in enumerate(clsPatterns):
+        for k, v in enumerate(spreadPatterns[c]):
+            pat[k] = alfa*v + (1-alfa)*pat[k]
+        normalizeVet(pat)
 
 def _genNodesPatterns(g, nodeClass, patternToIdx):
     for node in nodeClass.keys():
@@ -228,25 +230,24 @@ def _genNodesPatterns(g, nodeClass, patternToIdx):
         # padrões de conexão do nodo ao invés de acumular. Isto porque em testes
         # parece que desta forma (sem levar em conta o número de arestas) o
         # grafo resultante ficava mais limpo.
+        pattValues = {}
         for nei, rel in g.outNeighboors(node):
-            if nei == node:
-                pat = (rel, AUTO)
-            else:
-                pat = (rel, OUT, nodeClass[nei])
-
-            idx = patternToIdx[pat]
-            vet[idx] = 1
             hasEdge = True
+            pat = (rel, OUT, nodeClass[nei])
+            v = pattValues.get(pat, 0)
+            pattValues[pat] = v + 1
+            # pattValues[pat] = 1
 
         for nei, rel in g.inNeighboors(node):
-            if nei == node:
-                # já foi contabilizada
-                continue
-
-            pat = (rel, IN, nodeClass[nei])
-            idx = patternToIdx[pat]
-            vet[idx] = 1
             hasEdge = True
+            pat = (rel, OUT, nodeClass[nei])
+            v = pattValues.get(pat, 0)
+            pattValues[pat] = v + 1
+            # pattValues[pat] = 1
+
+        for pat, v in pattValues.items():
+            idx = patternToIdx[pat]
+            vet[idx] = max(vet[idx], v)
 
         yield (node, vet, hasEdge)
 
@@ -260,6 +261,10 @@ class Toolbox(object):
         self._finalPb = 1.0
         self._incStartT = 0
         self._incStopT = 1
+
+        # Taxas de atualização dos vetores das classes
+        self.nodeAlfa = 0.10
+        self.spreadAlfa = 0.10
 
     def configPbSchedule(self, initPb, finalPb, incStartT, incStopT):
         """Configure the propability change schedule.
@@ -312,26 +317,28 @@ class Toolbox(object):
 
     def actualizeClassPatterns(self, g, iNum, nodeClass, clsPatterns,
             patternToIdx):
+        alfa = self.nodeAlfa
 
+        newClsPat = []
         for clsPat in clsPatterns:
-            zeroVet(clsPat)
+            newClsPat.append([0.0 for v in clsPat])
 
         for node, vet, hasEdge in _genNodesPatterns(g, nodeClass, patternToIdx):
             if hasEdge:
+                normalizeVet(vet)
                 cls = nodeClass[node]
-                clsPat = clsPatterns[cls]
+                clsPat = newClsPat[cls]
                 addIntoVet1(clsPat, vet)
 
-        for clsPat in clsPatterns:
+        for cls, clsPat in enumerate(clsPatterns):
+            normalizeVet(newClsPat[cls])
+            for k, v in enumerate(newClsPat[cls]):
+                clsPat[k] = alfa*v + (1-alfa)*clsPat[k]
             normalizeVet(clsPat)
 
-        if iNum == 0 and self.doClassSpread:
-            # Na primeira iteração, os nodos estão aleatoriamente distribuídos
-            # nas classes. Isto faz com que os vetores das classes fiquem muito
-            # próximos neste primeiro momento, dificultando a separação dos
-            # nodos. Para evitar isso forçamos uma diferenciação dos vetores das
-            # classes neste momento
-            _spreadPatterns(clsPatterns)
+        if self.doClassSpread:
+            # Diferenciando um pouco os vetores das classes entre si
+            _spreadPatterns(clsPatterns, self.spreadAlfa)
 
 
     def generateNewNodeClass(self, g, iNum, nodeClass, clsPatterns,
@@ -404,9 +411,7 @@ def ksemiRegularClass(g, k, iMax, visitor, toolbox=toolbox):
     """
     # Criando mapa de padrao de conexao para indice no vetor de padrao
     # Número de relações * 2 (entrada e saida) * número de classes (k)
-    iterInOutPatt = itertools.product(g.relations,(IN,OUT),range(k))
-    iterAutoPatt = itertools.product(g.relations,(AUTO,))
-    iterPatt = itertools.chain(iterAutoPatt, iterInOutPatt)
+    iterPatt = itertools.product(g.relations,(IN,OUT),range(k))
     patternToIdx = {p:i for i, p in enumerate(iterPatt)}
 
     # Criando classificação inicial
