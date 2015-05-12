@@ -240,7 +240,7 @@ def _genNodesPatterns(g, nodeClass, patternToIdx):
 
         for nei, rel in g.inNeighboors(node):
             hasEdge = True
-            pat = (rel, OUT, nodeClass[nei])
+            pat = (rel, IN, nodeClass[nei])
             v = pattValues.get(pat, 0)
             pattValues[pat] = v + 1
             # pattValues[pat] = 1
