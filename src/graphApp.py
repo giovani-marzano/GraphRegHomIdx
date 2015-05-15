@@ -68,6 +68,7 @@ import graph as gr
 from semiRegHom import KSemiRegClassVisitor, ksemiRegularClass
 import semiRegHom
 import random
+import itertools
 
 class GraphModel(object):
     def __init__(self, graphObj, name, filename=None):
@@ -691,6 +692,54 @@ class GraphAppControl(object):
 
         self._callChangeHandlers(gmod)
 
+    def createConnectionProfileNodeAttributes(self, graphName,
+            attrPrefix='conProf', preClassAttr=None, countOcurrences=False):
+
+        if graphName not in self.graphModels.keys():
+            raise KeyError(
+                "Grafo '{0}' não existe".format(graphName))
+
+        gmod = self.graphModels[graphName]
+
+        if preClassAttr:
+            def getNodeClass(node):
+                return gmod.graph.getNodeAttr(node, preClassAttr)
+            classValues = gmod.graph.getNodeAttrValueSet(preClassAttr)
+        else:
+            def getNodeClass(node):
+                return 0
+            classValues = {0}
+
+        iterProf = itertools.product(gmod.graph.relations,
+            classValues,('in','out'))
+        profAttrs = {}
+        for prof in iterProf:
+            name = '_'.join(itertools.chain([attrPrefix], map(str,prof)))
+            spec = gr.AttrSpec(name,int,0)
+            gmod.graph.addNodeAttrSpec(spec)
+            profAttrs[prof] = name
+
+        if countOcurrences:
+            def addProfile(node, prof):
+                attr = profAttrs[prof]
+                v = gmod.graph.getNodeAttr(node, attr)
+                v += 1
+                gmod.graph.setNodeAttr(node, attr, v)
+        else:
+            def addProfile(node, prof):
+                attr = profAttrs[prof]
+                gmod.graph.setNodeAttr(node, attr, 1)
+
+        for node in gmod.graph.nodes():
+            for nei, rel in gmod.graph.outNeighboors(node):
+                prof = (rel, getNodeClass(nei), 'out')
+                addProfile(node, prof)
+            for nei, rel in gmod.graph.inNeighboors(node):
+                prof = (rel, getNodeClass(nei), 'in')
+                addProfile(node, prof)
+
+        self._callChangeHandlers(gmod)
+
 #---------------------------------------------------------------------
 # Classes GUI
 #---------------------------------------------------------------------
@@ -972,6 +1021,9 @@ class GraphAppGUI(tk.Frame):
             command=self.menuCmdExportNodeAttr)
         m.add_command(label='Remover atributos...',
             command=self.menuCmdRemoveNodeAttr)
+        m.add_separator()
+        m.add_command(label='Criar atributos de conectividade...',
+            command=self.menuCmdCreateConnectionProfileNodeAttributes)
         #m.add_separator()
         #m.add_command(label='#Criar agregador...',
         #    command=self.menuCmdNotImplemented)
@@ -982,8 +1034,8 @@ class GraphAppGUI(tk.Frame):
         m.add_separator()
         m.add_command(label='Classificar por equivalência regular...',
             command=self.menuCmdClassifyRegularEquiv)
-        m.add_command(label='Classificação aproximadamente regular...',
-            command=self.menuCmdClassifySemiRegular)
+        #m.add_command(label='Classificação aproximadamente regular...',
+        #    command=self.menuCmdClassifySemiRegular)
 
         m = tk.Menu(self.menuBar)
         self.menuBar.add_cascade(label='Arestas', menu=m)
@@ -1127,6 +1179,14 @@ class GraphAppGUI(tk.Frame):
             gsel = gsel.name
         d = FullHomomorphismDialog(self, self.control, gsel)
         self.consumeQueue()
+
+    def menuCmdCreateConnectionProfileNodeAttributes(self):
+        gsel = self.getSelectedGraph()
+        if gsel is not None:
+            gsel = gsel.name
+        d = ConnectionNodeAttrDialog(self, self.control, gsel)
+        self.consumeQueue()
+
 
 class AttributeConfigFrame(ttk.Frame):
     def __init__(self, master, numAttrs, **options):
@@ -2704,6 +2764,151 @@ class OpenCsvEdgesDialog(Dialog):
                     firstRowIsHeading=self.hasHeadingRow.get())
 
         d = gui.ExecutionDialog(master=self.master, command=execute,
+                logger=self.control.logger)
+
+class ConnectionNodeAttrDialog(Dialog):
+    def __init__(self, master, control, selectedGraph=''):
+
+        self.master = master
+        self.control = control
+
+        self.graphName = tk.StringVar()
+        self.preClassAttrTxt = tk.StringVar()
+        self.preClassAttr = None
+        self.attrPrefix = tk.StringVar()
+        self.attrPrefix.set('conProf')
+        self.nodeAttrs = []
+        self.countOcurrences = tk.BooleanVar()
+        self.countOcurrences.set(False)
+
+        if selectedGraph:
+            self._setGraphName(selectedGraph)
+
+        super().__init__(master, 'Homomorfismo cheio')
+
+    def _setGraphName(self, graphName):
+        self.graphName.set(graphName)
+
+        gmod = self.control.getGraphModel(graphName)
+        if gmod:
+            self.nodeAttrs = sorted(gmod.graph.getNodeAttrNames())
+        else:
+            self.nodeAttrs = []
+
+        self.preClassAttr = None
+        self.preClassAttrTxt.set('')
+
+    def body(self, master):
+        master.columnconfigure(1, weight=1)
+        labelwidth = 25
+        row = 0
+
+        lb = ttk.Label(master, text='Grafo:', justify=tk.RIGHT, anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.graphName, state='readonly')
+        btn = ttk.Button(master, text='Escolher...',
+                command=self._doBtnChooseGraph)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry, btn)
+
+        lb = ttk.Label(master, text='Prefixo para os novos atributos:',
+                justify=tk.RIGHT, anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.attrPrefix)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry)
+
+        lb = ttk.Label(master, text='Pré-classificação de nodo:',
+                justify=tk.RIGHT, anchor=tk.E)
+        entry = ttk.Entry(master, textvariable=self.preClassAttrTxt,
+                state='readonly')
+        btn = ttk.Button(master, text='Escolher...',
+                command=self._doBtnChooseNodeClass)
+        row = gridLabelAndWidgets(row, labelwidth, lb, entry, btn)
+
+        self.nodeClassButton = btn
+
+        lb = ttk.Label(master, text='Contar número de ocorrências.')
+        cb = ttk.Checkbutton(master, variable=self.countOcurrences)
+        lb.grid(row=row, column=1, columnspan=2, sticky=tk.W)
+        cb.grid(row=row, column=0, sticky=tk.E)
+        row += 1
+
+        self._updateButtonStates()
+
+        master.pack(fill='both', expand=True)
+
+    def _doBtnChooseGraph(self):
+        graphs = self.control.getGraphNames()
+        dialog = gui.ListSelectionDialog(self, title='Escolha de grafo',
+            text='Escolha o grafo de origem.',
+            items=graphs, selected=self.graphName.get())
+
+        if dialog.result:
+            for i, sel in dialog.result:
+                self._setGraphName(sel)
+                self._updateButtonStates()
+                break
+
+    def _doBtnChooseNodeClass(self):
+        items = ['<nenhum>'] + self.nodeAttrs
+        idxShift = 1
+
+        dialog = gui.ListSelectionDialog(self,
+            title='Seleção de pré-classificação de nodos',
+            text='Selecione a pré-classificação de nodos. Os padrões de ' +
+                 'coneção serão analisados segundo esta classificação.\n\n' +
+                 'Escolhendo <nenhum>, será considerado que todos os nodos ' +
+                 'pertencem a uma mesma classe.',
+            items=items, selected=self.preClassAttrTxt.get())
+
+        if dialog.result is not None:
+            for i, v in dialog.result:
+                if i - idxShift < 0:
+                    self.preClassAttr = None
+                else:
+                    self.preClassAttr = v
+
+                self.preClassAttrTxt.set(v)
+
+    def _updateButtonStates(self):
+        btnState = tk.DISABLED
+        if self.graphName.get().strip():
+            btnState = tk.NORMAL
+
+        self.nodeClassButton['state'] = btnState
+
+    def validate(self):
+        isOk = True
+        errMsg = ''
+
+        if not self.graphName.get():
+            errMsg = 'O grafo não foi escolhido!'
+            isOk = False
+
+        name = self.attrPrefix.get().strip()
+
+        if isOk and not name:
+            isOk = False
+            errMsg = 'O prefixo para os novos atributos não foi configurado!'
+
+        if not isOk:
+            tk.messagebox.showwarning('Problema na configuração',
+                errMsg)
+
+        return isOk
+
+    def apply(self):
+        graphName = self.graphName.get().strip()
+        attrPrefix = self.attrPrefix.get().strip()
+        preClassAttr = self.preClassAttr
+        countOcurrences = self.countOcurrences.get()
+
+        def execute():
+            self.control.createConnectionProfileNodeAttributes(
+                graphName=graphName,
+                attrPrefix=attrPrefix,
+                preClassAttr=preClassAttr,
+                countOcurrences=countOcurrences
+            )
+
+        gui.ExecutionDialog(master=self.master, command=execute,
                 logger=self.control.logger)
 
 #---------------------------------------------------------------------
