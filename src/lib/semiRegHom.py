@@ -221,8 +221,16 @@ def _spreadPatterns(clsPatterns, alfa):
             pat[k] = alfa*v + (1-alfa)*pat[k]
         normalizeVet(pat)
 
-def _genNodesPatterns(g, nodeClass, patternToIdx):
+def _getRelativeClass(numClasses, myClass, otherClass):
+    return (otherClass - myClass + numClasses) % numClasses
+
+def _getAbsoluteClass(numClasses, myClass, otherClass):
+    return otherClass
+
+def _genNodesPatterns(g, nodeClass, patternToIdx, numClasses,
+        getOtherClass=_getAbsoluteClass):
     for node in nodeClass.keys():
+        myClass = nodeClass[node]
         hasEdge = False
         vet = [0.0 for _ in patternToIdx]
 
@@ -233,14 +241,16 @@ def _genNodesPatterns(g, nodeClass, patternToIdx):
         pattValues = {}
         for nei, rel in g.outNeighboors(node):
             hasEdge = True
-            pat = (rel, OUT, nodeClass[nei])
+            neiClass = getOtherClass(numClasses, myClass, nodeClass[nei])
+            pat = (rel, OUT, neiClass)
             v = pattValues.get(pat, 0)
             pattValues[pat] = v + 1
             # pattValues[pat] = 1
 
         for nei, rel in g.inNeighboors(node):
             hasEdge = True
-            pat = (rel, IN, nodeClass[nei])
+            neiClass = getOtherClass(numClasses, myClass, nodeClass[nei])
+            pat = (rel, IN, neiClass)
             v = pattValues.get(pat, 0)
             pattValues[pat] = v + 1
             # pattValues[pat] = 1
@@ -265,6 +275,8 @@ class Toolbox(object):
         # Taxas de atualização dos vetores das classes
         self.nodeAlfa = 0.10
         self.spreadAlfa = 0.10
+
+        self._getOtherClass = _getRelativeClass
 
     def configPbSchedule(self, initPb, finalPb, incStartT, incStopT):
         """Configure the propability change schedule.
@@ -323,7 +335,8 @@ class Toolbox(object):
         for clsPat in clsPatterns:
             newClsPat.append([0.0 for v in clsPat])
 
-        for node, vet, hasEdge in _genNodesPatterns(g, nodeClass, patternToIdx):
+        for node, vet, hasEdge in _genNodesPatterns(g, nodeClass, patternToIdx,
+                len(clsPatterns), getOtherClass=self._getOtherClass):
             if hasEdge:
                 normalizeVet(vet)
                 cls = nodeClass[node]
@@ -349,7 +362,8 @@ class Toolbox(object):
         newNodeClass = {}
         totalRank = 0.0
         countNodes = 0
-        for node, vet, hasEdge in _genNodesPatterns(g, nodeClass, patternToIdx):
+        for node, vet, hasEdge in _genNodesPatterns(g, nodeClass, patternToIdx,
+                len(clsPatterns), getOtherClass=self._getOtherClass):
             # escolhendo nova classe para o nodo
             newCls = -1
             if hasEdge:
