@@ -227,37 +227,45 @@ def _getRelativeClass(numClasses, myClass, otherClass):
 def _getAbsoluteClass(numClasses, myClass, otherClass):
     return otherClass
 
+def getNodePattern(g, node, nodeClass, patternToIdx, numClasses,
+        getOtherClass=_getAbsoluteClass):
+
+    myClass = nodeClass[node]
+    hasEdge = False
+    vet = [0.0 for _ in patternToIdx]
+
+    # OBS: Nas contabilizações abaixo estamos apenas setando com 1 os
+    # padrões de conexão do nodo ao invés de acumular. Isto porque em testes
+    # parece que desta forma (sem levar em conta o número de arestas) o
+    # grafo resultante ficava mais limpo.
+    pattValues = {}
+    for nei, rel in g.outNeighboors(node):
+        hasEdge = True
+        neiClass = getOtherClass(numClasses, myClass, nodeClass[nei])
+        pat = (rel, OUT, neiClass)
+        #v = pattValues.get(pat, 0)
+        #pattValues[pat] = v + 1
+        pattValues[pat] = 1
+
+    for nei, rel in g.inNeighboors(node):
+        hasEdge = True
+        neiClass = getOtherClass(numClasses, myClass, nodeClass[nei])
+        pat = (rel, IN, neiClass)
+        #v = pattValues.get(pat, 0)
+        #pattValues[pat] = v + 1
+        pattValues[pat] = 1
+
+    for pat, v in pattValues.items():
+        idx = patternToIdx[pat]
+        vet[idx] = max(vet[idx], v)
+
+    return vet, hasEdge
+
 def _genNodesPatterns(g, nodeClass, patternToIdx, numClasses,
         getOtherClass=_getAbsoluteClass):
     for node in nodeClass.keys():
-        myClass = nodeClass[node]
-        hasEdge = False
-        vet = [0.0 for _ in patternToIdx]
-
-        # OBS: Nas contabilizações abaixo estamos apenas setando com 1 os
-        # padrões de conexão do nodo ao invés de acumular. Isto porque em testes
-        # parece que desta forma (sem levar em conta o número de arestas) o
-        # grafo resultante ficava mais limpo.
-        pattValues = {}
-        for nei, rel in g.outNeighboors(node):
-            hasEdge = True
-            neiClass = getOtherClass(numClasses, myClass, nodeClass[nei])
-            pat = (rel, OUT, neiClass)
-            v = pattValues.get(pat, 0)
-            pattValues[pat] = v + 1
-            # pattValues[pat] = 1
-
-        for nei, rel in g.inNeighboors(node):
-            hasEdge = True
-            neiClass = getOtherClass(numClasses, myClass, nodeClass[nei])
-            pat = (rel, IN, neiClass)
-            v = pattValues.get(pat, 0)
-            pattValues[pat] = v + 1
-            # pattValues[pat] = 1
-
-        for pat, v in pattValues.items():
-            idx = patternToIdx[pat]
-            vet[idx] = max(vet[idx], v)
+        vet, hasEdge = getNodePattern(g, node, nodeClass, patternToIdx,
+                numClasses, getOtherClass)
 
         yield (node, vet, hasEdge)
 
@@ -398,6 +406,12 @@ class Toolbox(object):
 
 toolbox = Toolbox()
 
+def createPatternToIdx(g, k):
+    # Criando mapa de padrao de conexao para indice no vetor de padrao
+    # Número de relações * 2 (entrada e saida) * número de classes (k)
+    iterPatt = itertools.product(g.relations,(IN,OUT),range(k))
+    return {p:i for i, p in enumerate(iterPatt)}
+
 def ksemiRegularClass(g, k, iMax, visitor, toolbox=toolbox):
     """Algoritmo que encontra uma classificação com *k* classes para os vértices
     do grafo *g* de forma que o homomorfismo induzido por esta classificação
@@ -423,10 +437,7 @@ def ksemiRegularClass(g, k, iMax, visitor, toolbox=toolbox):
               regularidade de aresta induzidos pela classificação de nodos.
         - ending(): Chamada ao final do algoritmo.
     """
-    # Criando mapa de padrao de conexao para indice no vetor de padrao
-    # Número de relações * 2 (entrada e saida) * número de classes (k)
-    iterPatt = itertools.product(g.relations,(IN,OUT),range(k))
-    patternToIdx = {p:i for i, p in enumerate(iterPatt)}
+    patternToIdx = createPatternToIdx(g,k)
 
     # Criando classificação inicial
     nodeClass = toolbox.generateInitialNodeClass(g, k)
