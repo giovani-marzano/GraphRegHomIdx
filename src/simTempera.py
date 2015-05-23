@@ -5,8 +5,6 @@ import os.path
 import sys
 import logging
 import logging.config
-import math
-import random
 import csv
 
 # Acrescentando o diretorio lib ao path. Lembrando que sys.path[0] representa o
@@ -62,10 +60,37 @@ CSV_OUT_CONFIG = {
 CSV_OUT_DIALECT='appcsvdialect'
 csv.register_dialect(CSV_OUT_DIALECT, **CSV_OUT_CONFIG)
 
+import math
+import random
+import itertools
+
 import graph as gr
-import semiRegHom as srh
 
 logger = logging.getLogger(__name__)
+
+# Constantes para direção da aresta
+IN = 0
+OUT = 1
+
+def normalizeVet(vet):
+    """Normaliza o vetor fornecido, aterando-o.
+    """
+    s = math.sqrt(sum(map(lambda v: v**2, vet)))
+
+    if s > 0:
+        for i,v in enumerate(vet):
+            vet[i] = v/s
+
+    return vet
+
+def vetDotProduct(v1, v2):
+    return sum(map(lambda x: x[0]*x[1], zip(v1,v2)))
+
+def createPatternToIdx(g, k):
+    # Criando mapa de padrao de conexao para indice no vetor de padrao
+    # Número de relações * 2 (entrada e saida) * número de classes (k)
+    iterPatt = itertools.product(g.relations,(IN,OUT),range(k))
+    return {p:i for i, p in enumerate(iterPatt)}
 
 class SimTempora(object):
     def __init__(self, g, k, maxTime, iniTemp=1, endTemp=0, iniTime=0,
@@ -79,7 +104,6 @@ class SimTempora(object):
         self.endTime = endTime or maxTime
         self.temp = self.calcTemperature(0)
 
-        self.bestRI = 0.0
         self.bestEnergy = float('inf')
         self.bestNodeCls = None
 
@@ -96,7 +120,7 @@ class SimTempora(object):
 
         self.nodeRefClassF = nodeRefClassF
 
-        self.patternToIdx = srh.createPatternToIdx(g,numClassRef)
+        self.patternToIdx = createPatternToIdx(g,numClassRef)
 
         self.clsPatterns = []
         for cls in range(k):
@@ -124,33 +148,26 @@ class SimTempora(object):
 
             for tgt, rel in self.g.outNeighboors(node):
                 tgtClass = self.nodeRefClassF(nodeCls, tgt)
-                pat = (rel, srh.OUT, tgtClass)
+                pat = (rel, OUT, tgtClass)
                 idx = self.patternToIdx[pat]
                 self.clsPatterns[cls][idx] += 1
 
             for src, rel in self.g.inNeighboors(node):
                 srcClass = self.nodeRefClassF(nodeCls, src)
-                pat = (rel, srh.IN, srcClass)
+                pat = (rel, IN, srcClass)
                 idx = self.patternToIdx[pat]
                 self.clsPatterns[cls][idx] += 1
 
         for cls, vet in enumerate(self.clsPatterns):
-            for i, v in enumerate(vet):
-                vet[i] = v/nodeCount[cls]
+            if nodeCount[cls] > 0:
+                for i, v in enumerate(vet):
+                    vet[i] = v/nodeCount[cls]
 
     def actualizeClassPatterns(self, nodeCls):
-        stats = gr.fullMorphismStats(self.g,
-                lambda n: nodeCls[n], lambda e: e[2])
-        edgeStats = gr.calcPreRegIdxStats(*stats)
-        edgeRegIdx = gr.calcEdgeRegIdx(edgeStats)
-        graphRI = gr.calcGraphRegIdx(edgeStats)
-
         self._calcRawClassPatterns(nodeCls)
 
         for vet in self.clsPatterns:
             self._processRawPatternVet(vet)
-
-        return graphRI.ri
 
     def _processRawPatternVet(self, vet):
         """Um vetor de padrão de conexão bruto possui componentes variando de 0
@@ -161,7 +178,7 @@ class SimTempora(object):
         for i,v in enumerate(vet):
             vet[i] = 2*v - 1
 
-        srh.normalizeVet(vet)
+        normalizeVet(vet)
 
     def getNodeBestClassMatch(self, node, nodeCls):
         vet, hasEdge = self.getNodePattern(node, nodeCls)
@@ -171,7 +188,7 @@ class SimTempora(object):
         bestSim = float('-inf')
         oldSim = 0
         for cls, pat in enumerate(self.clsPatterns):
-            sim = srh.vetDotProduct(vet, pat)
+            sim = vetDotProduct(vet, pat)
             if cls == nodeCls[node]:
                 oldSim = sim
             elif sim > bestSim:
@@ -205,7 +222,7 @@ class SimTempora(object):
             self._processRawPatternVet(vet)
             cls = nodeCls[node]
             clsVet = self.clsPatterns[cls]
-            sim = srh.vetDotProduct(vet, clsVet)
+            sim = vetDotProduct(vet, clsVet)
             totalE -= sim
 
         return totalE
@@ -216,11 +233,11 @@ class SimTempora(object):
             nodeCls[node] = random.randrange(self.k)
         nodes = list(g.nodes())
 
-        ri = self.actualizeClassPatterns(nodeCls)
+        self.actualizeClassPatterns(nodeCls)
         totalE = self._calcTotalEnergy(nodeCls)
-        self.setBest(nodeCls, ri, totalE)
+        self.setBest(nodeCls, totalE)
 
-        logger.info('Iniciando %f', ri)
+        logger.info('Iniciando %f', totalE)
 
         for time in range(self.maxTime):
             random.shuffle(nodes)
@@ -232,11 +249,11 @@ class SimTempora(object):
                 if self.doMove(temp, delta):
                     nodeCls[node] = bestChangeCls
                     changed = True
-                    ri = self.actualizeClassPatterns(nodeCls)
+                    self.actualizeClassPatterns(nodeCls)
                     totalE += delta
-                    self.setBest(nodeCls, ri, totalE)
+                    self.setBest(nodeCls, totalE)
 
-                logger.info('%d %f %f %f %f', time, temp, ri, totalE, delta)
+                logger.info('%d %f %f %f', time, temp, totalE, delta)
 
             if not changed and temp == 0:
                 break
@@ -250,13 +267,13 @@ class SimTempora(object):
         for nei, rel in self.g.outNeighboors(node):
             hasEdge = True
             neiClass = self.nodeRefClassF(nodeClass, nei)
-            pat = (rel, srh.OUT, neiClass)
+            pat = (rel, OUT, neiClass)
             pattValues[pat] = 1
 
         for nei, rel in self.g.inNeighboors(node):
             hasEdge = True
             neiClass = self.nodeRefClassF(nodeClass, nei)
-            pat = (rel, srh.IN, neiClass)
+            pat = (rel, IN, neiClass)
             pattValues[pat] = 1
 
         for pat, v in pattValues.items():
@@ -271,10 +288,9 @@ class SimTempora(object):
 
             yield (node, vet, hasEdge)
 
-    def setBest(self, nodeCls, ri, totalE):
+    def setBest(self, nodeCls, totalE):
         if totalE <= self.bestEnergy:
             self.bestNodeCls = dict(nodeCls)
-            self.bestRI = ri
             self.bestEnergy = totalE
 
     def calcTemperature(self, time):
@@ -305,9 +321,9 @@ class SimTempora(object):
 if __name__ == '__main__':
     g = gr.loadGraphml('teste.graphml', relationAttr='relation')
 
-    sim = SimTempora(g, 5, 20,
-        iniTemp=0.5, endTemp=0.0,
-        iniTime=0, endTime=15, refClassAttr='class')
+    sim = SimTempora(g, 7, 15,
+        iniTemp=0.2, endTemp=0.0,
+        iniTime=0, endTime=10, refClassAttr='regCls_1')
 
     sim.search()
 
