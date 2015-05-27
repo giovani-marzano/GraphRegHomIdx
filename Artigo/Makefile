@@ -9,13 +9,13 @@ STYLE_ODT=$(STYLES_DIR)/puc_artigo.odt
 IMG_SRC_DIR=img_src
 OUT_DIR=output
 
-SAIDAS= artigo.html artigo.odt
+SAIDAS= Artigo.pdf
 
 OUTS = $(SAIDAS:%=$(OUT_DIR)/%)
 
 .PHONY: all imgs
 
-all: imgs
+all: imgs $(OUTS)
 
 $(OUT_DIR)/artigo.odt: artigo.rst bibliografia.rst
 
@@ -34,6 +34,9 @@ $(OUT_DIR)/%.html: %.rst
 
 $(OUT_DIR)/%.tex: %.rst
 	$(RST2LATEX) $< $@
+
+$(OUT_DIR)/%.pdf: %.odt
+	libreoffice --invisible --convert-to pdf:writer_pdf_Export --outdir $(OUT_DIR) $<
 
 clean:
 	$(MAKE) -C $(IMG_SRC_DIR) clean
