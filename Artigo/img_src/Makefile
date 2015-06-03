@@ -11,7 +11,8 @@ SVG_SRCS= esquemaRegIdxAresta.svg esquemaRegIdxGrafo.svg exemploGrafo.svg \
           exemploHomomorfismo.svg exemploMorfismoCheio.svg \
           exemploMorfismoRegular.svg ctr1k_randClass_filtrado.svg \
           r100baseCls_filtrado.svg r100baseCls_raw.svg \
-          r10baseCls_filtrado.svg r10baseCls_raw.svg base5n.svg
+          r10baseCls_filtrado.svg r10baseCls_raw.svg base5n.svg \
+          FVUSilhueta.svg faceHom.svg
 
 SVG_EPS= $(SVG_SRCS:%.svg=$(OUT_DIR)/%.eps)
 
