@@ -36,7 +36,7 @@ Experimentações: Realização de experimentos para validar as implementações
 
 Para a visualização dos grafos foi utilizada a ferramenta yEd, da empresa yWorks. A análise dos grafos gerados pelos algoritmos implementados era realizada nesta ferramenta uma vez que ela permite o mapeamento dos atributos associados aos elementos do grafo a propriedades do desenho como cor, formato e etiqueta de vértices e arrestas.
 
-Os dados utilizados como entrada nos experimentos foram de dois tipos: artificiais e reais. Os dados artificiais eram grafos criados manualmente no yEd e, se necessário, processados por scripts criados para este fim. Os dados reais foram cedidos pelo mestrando Pedro H. B. Ruas e foram coletados por ele de sua rede social no Facebook utilizando a ferramenta NodeXL.
+Os dados utilizados como entrada nos experimentos foram de dois tipos: artificiais e reais. Os dados artificiais foram [REV] grafos criados manualmente no yEd e, se necessário, processados por scripts criados para este fim. Os dados reais foram cedidos pelo mestrando Pedro H. B. Ruas e foram coletados por ele de sua rede social no Facebook utilizando a ferramenta NodeXL.
 
 3 Grafos orientados
 
@@ -52,7 +52,7 @@ d) Função que mapeia cada aresta a seu vértice de destino.
 
 
 
-O grafo orientado da definição 1 é algumas vezes chamado na literatura de multigrafo por permitir arestas paralelas. Apresentamos a seguir a definição de grafo orientado utilizada normalmente em textos que utilizam esta estrutura, pois será utilizada em próximas definições.
+O grafo orientado da definição 1 é algumas vezes chamado na literatura de multigrafo por permitir arestas paralelas. Apresenta-se [REV] a seguir a definição de grafo orientado utilizada normalmente em textos que utilizam esta estrutura, pois será utilizada em próximas definições.
 
 
 
@@ -72,7 +72,7 @@ A Figura 1 traz um grafo como exemplo. Neste, V é o conjunto {1,2,3,4} e A é o
 
 De Maio, 2009, chama de “... caminho de um grafo a uma coleção finita de arestas do tipo ordenada, que liga o vértice ao vértice .” (DE MAIO, 2009, p. 167).  Nesta definição, cada aresta é identificada pelo par de vértices  origem e destino que a aresta conecta.
 
-No caso de multigrafos, as arestas não são unicamente identificadas pelo par de vértices que conectam. Logo uma sequência de pares de vértices não identifica unicamente um caminho neste caso. Podemos expandir a definição de caminho para multigrafos, seguindo a notação da definição 1, como a seguir:
+No caso de multigrafos, as arestas não são unicamente identificadas pelo par de vértices que conectam. Logo uma sequência de pares de vértices não identifica unicamente um caminho neste caso. Pode-se [REV] expandir a definição de caminho para multigrafos, seguindo a notação da definição 1, como a seguir:
 
 Definição 3 - Caminho em um grafo: Em um grafo, um caminho de tamanho n é uma sequência de arestascom, para i variando de 1 a n, e tal que para todo, com k variando de 1 a n-1, temos que. A origem do caminho é o vértice na origem de sua primeira aresta. O destino do caminho é o vértice no destino de sua última aresta.
 
@@ -112,17 +112,17 @@ A equação (2) significa que tomar o vértice de destino de uma aresta do grafo
 
 A Figura 2 contém um exemplo de homomorfismo. Nela está explicitada uma tabela que verifica a condição da equação (1). A equação (2) poderia ser igualmente verificada com uma tabela semelhante.
 
-Fazendo um paralelo com funções na teoria dos conjuntos, podemos dizer que, para um homomorfismo de grafos, o grafoé o domínio do homomorfismo e o grafoé o contradomínio. O subgrafo deatingido pelos mapeamentos definidos pelo homomorfismo pode ser chamado de imagem deste.
+Fazendo um paralelo com funções na teoria dos conjuntos, pode-se dizer que, para um homomorfismo de grafos, o grafoé o domínio do homomorfismo e o grafoé o contradomínio. O subgrafo deatingido pelos mapeamentos definidos pelo homomorfismo pode ser chamado de imagem deste.
 
 Um homomorfismo de grafo preserva os caminhos existentes no grafo domínio. Isto significa que se existe um caminho de tamanho n de um vértice x a um vértice y no domínio, então existe um caminho de tamanho n do vértice fV(x) ao vértice fV(y) no contradomínio.
 
-A existência de caminho no grafo contradomínio, no entanto, não implica na existência de caminho correspondente no grafo domínio, como podemos ver no exemplo da Figura 2: existe um caminho entre os vértices 8 e 9, pela aresta s, mas não exite nenhum caminho no grafo de domínio entre algum dos vértices 2 ou 3, mapeados em 8, para o vértice 4, mapeado em 9.
+A existência de caminho no grafo contradomínio, no entanto, não implica na existência de caminho correspondente no grafo domínio, como pode-se [REV] ver no exemplo da Figura 2: existe um caminho entre os vértices 8 e 9, pela aresta s, mas não exite nenhum caminho no grafo de domínio entre algum dos vértices 2 ou 3, mapeados em 8, para o vértice 4, mapeado em 9.
 
-Neste trabalho estamos interessados no que se pode afirmar sobre o grafo  domínio a partir de observações feitas no grafo do contradomínio de um homomorfismo. De posse apenas de um homomorfismo de grafos como apresentado podemos apenas afirmar que: se não existe um caminho de tamanho n entre dois vértices, x e y, do contradomínio, então não existe nenhum caminho de tamanho n entre dois vértices a e b do grafo domínio tal que fV(a) = x e fV(b) = y.
+Neste trabalho procura-se saber [REV] o que se pode afirmar sobre o grafo  domínio a partir de observações feitas no grafo do contradomínio de um homomorfismo. De posse apenas de um homomorfismo de grafos como apresentado pode-se [REV] apenas afirmar que: se não existe um caminho de tamanho n entre dois vértices, x e y, do contradomínio, então não existe nenhum caminho de tamanho n entre dois vértices a e b do grafo domínio tal que fV(a) = x e fV(b) = y.
 
 3.3 Homomorfismo cheio
 
-Definição 5 - Homomorfismo de grafo cheio (1): White e Reitz, (1983, 1992), definem um tipo de homomorfismo de grafo um pouco mais restrito que chamam de full homomorphism, que traduzimos aqui como homomorfismo cheio ( no trecho abaixo aRb significa que existe um par ordenado (a,b) na relação R ):
+Definição 5 - Homomorfismo de grafo cheio (1): White e Reitz, (1983, 1992), definem um tipo de homomorfismo de grafo um pouco mais restrito que chamam de full homomorphism, que traduzido [REV] aqui como homomorfismo cheio ( no trecho abaixo aRb significa que existe um par ordenado (a,b) na relação R ):
 
 Sejam dois grafos G = (P, R) e G' = (P', R'). Então f:GG' é um homomorfismo de grafo cheio se e somente se f:PP' é uma função sobrejetora tal que para todo a,b ∈ P e x,y ∈ P , aRb implica que f(a)R'f(b) e xR'y implica que  c,d ∈ P : cRd, f(c) = x e f(d) = y.(WHITE, REITZ, 1992, p. 434, tradução nossa2)
 
@@ -138,11 +138,11 @@ O homomorfismo da Figura 2 não é um homomorfismo cheio pois nenhuma aresta de 
 
 
 
-Com um homomorfismo cheio podemos afirmar que: se existe uma aresta entre os vértices x e y no grafo do contradomínio, então existe pelo menos uma aresta entre dois vértices a e b do grafo domínio tal que fv(a) = x e fV(b) = y. Esta afirmação, porém, se limita a arestas, não podendo ser aplicada a caminhos de tamanhos arbitrários, como pode ser visto no exemplo da Figura 3: Há um caminho de tamanho 2 no grafo contradomínio, porém não há nenhum caminho de tamanho 2 no grafo domínio.
+Com um homomorfismo cheio pode-se [REV] afirmar que: se existe uma aresta entre os vértices x e y no grafo do contradomínio, então existe pelo menos uma aresta entre dois vértices a e b do grafo domínio tal que fv(a) = x e fV(b) = y. Esta afirmação, porém, se limita a arestas, não podendo ser aplicada a caminhos de tamanhos arbitrários, como pode ser visto no exemplo da Figura 3: Há um caminho de tamanho 2 no grafo contradomínio, porém não há nenhum caminho de tamanho 2 no grafo domínio.
 
 3.3.1 Homomorfismo cheio a partir de classificações de vértices e arestas
 
-Podemos derivar um homomorfismo de grafos cheio a partir de um grafo G e de uma função f qualquer cujo domínio seja seu conjunto de vértices e de uma função g qualquer cujo domínio seja seu conjunto de arestas. Estas funções são interpretadas como mapeamentos dos vértices e arestas em classes ou tipos de vértices e arestas respectivamente. O grafo resultante apresenta classes de vértices conectadas por instâncias de classes de arestas.
+Pode-se [REV] derivar um homomorfismo de grafos cheio a partir de um grafo G e de uma função f qualquer cujo domínio seja seu conjunto de vértices e de uma função g qualquer cujo domínio seja seu conjunto de arestas. Estas funções são interpretadas como mapeamentos dos vértices e arestas em classes ou tipos de vértices e arestas respectivamente. O grafo resultante apresenta classes de vértices conectadas por instâncias de classes de arestas.
 
 Mais formalmente, seja um grafo,uma função qualquer e uma função qualquer. As funções f e g induzem um grafo e um homomorfismo de grafo cheio onde:
 
@@ -180,7 +180,7 @@ White e Reitz, 1992, ressaltam a importância do homomorfismo regular no estudo 
 
 No caso de um homomorfismo regular, pontos que possuem a mesma imagem necessariamente ocupam a mesma posição abstrata ou “papel” na rede ou grafo como um todo. Dois pontos possuem a mesma imagem em um homomorfismo regular se e somente se, dado que um deles tem uma relação com um ponto em um segundo conjunto imagem, o outro possui uma relação idêntica com um correspondente naquele conjunto. (WHITE, REITZ, 1992, p. 433, tradução nossa4)
 
-A Figura 4 apresenta um exemplo de homomorfismo regular. Nela podemos ver como este tipo de homomorfismo captura os papeis abstratos dos vértices no grafo domínio na topologia do grafo imagem: Os círculos são vértices que se conectam a algum quadrado; Os quadrados são vértices que recebem conexão de algum círculo e se conectam a algum losango; e os losangos são vértices que recebem conexão de algum quadrado. Para efeito de comparação, observe o exemplo da Figura 3, onde o homomorfismo não é regular. Nele não podemos afirmar que os vértices mapeados em 8 são os que recebem conexão de algum vértice mapeado em 7 e se conectam a algum vértice mapeado em 9. Uma vez que nenhum dos vértices mapeados em 8 (vértices 2 e 3) segue completamente este padrão.
+A Figura 4 apresenta um exemplo de homomorfismo regular. Nela pode-se [REV] ver como este tipo de homomorfismo captura os papeis abstratos dos vértices no grafo domínio na topologia do grafo imagem: Os círculos são vértices que se conectam a algum quadrado; Os quadrados são vértices que recebem conexão de algum círculo e se conectam a algum losango; e os losangos são vértices que recebem conexão de algum quadrado. Para efeito de comparação, observe o exemplo da Figura 3, onde o homomorfismo não é regular. Nele não se pode [REV] afirmar que os vértices mapeados em 8 são os que recebem conexão de algum vértice mapeado em 7 e se conectam a algum vértice mapeado em 9. Uma vez que nenhum dos vértices mapeados em 8 (vértices 2 e 3) segue completamente este padrão.
 
 
 
@@ -188,19 +188,19 @@ White e Reitz, 1992, mostram que, em um homomorfismo regular, a existência de u
 
 4 Índices de regularidade
 
-Neste trabalho estamos interessados em poder realizar algum tipo de análise sobre um grafo grande a partir de um grafo menor obtido a partir daquele por meio de um homomorfismo de grafos. Um homomorfismo regular é interessante para este objetivo pois preserva padrões de conectividade presentes no grafo original. Porém ao induzirmos um homomorfismo cheio a partir de uma classificação prévia dos vértices do grafo original este provavelmente não será regular. Mesmo que o homomorfismo com o qual lidemos não seja regular, gostaríamos de saber o quanto este se aproxima de um homomorfismo regular. O objetivo desta seção é propor indicadores numéricos que sugiram o quão regular um homomorfismo é. Chamaremos estes indicadores de índices de regularidade.
+Neste trabalho deseja-se [REV] poder realizar algum tipo de análise sobre um grafo grande a partir de um grafo menor obtido a partir daquele por meio de um homomorfismo de grafos. Um homomorfismo regular é interessante para este objetivo pois preserva padrões de conectividade presentes no grafo original.  Porém ao se induzir um homomorfismo cheio a partir de uma classificação prévia dos vértices do grafo original este provavelmente não será regular. Mesmo que o homomorfismo com o obtido não seja regular, deseja-se [REV] saber o quanto este se aproxima de um homomorfismo regular. O objetivo desta seção é propor indicadores numéricos que sugiram o quão regular um homomorfismo é. Estes serão chamados [REV] de índices de regularidade.
 
 
 
 
 
-Em um homomorfismo regular, todos os vértices que se mapeiam na origem de uma aresta no grafo imagem são origens de arestas que se mapeiam nesta aresta. O mesmo raciocínio pode ser feito para os destinos das arestas. Pelo esquema da Figura 5, isto quer dizer que, em um homomorfismo regular, temos que  e para todas as arestas do grafo imagem.
+Em um homomorfismo regular, todos os vértices que se mapeiam na origem de uma aresta no grafo imagem são origens de arestas que se mapeiam nesta aresta. O mesmo raciocínio pode ser feito para os destinos das arestas. Pelo esquema da Figura 5, isto quer dizer que, em um homomorfismo regular, se terá [REV] que  e para todas as arestas do grafo imagem.
 
-Para facilitar a discussão, quando um vértice x do grafo domínio é origem de uma aresta a que se mapeia em uma aresta b do grafo contradomínio diremos que o vértice x contribui como origem para a aresta b. Analogamente diremos que um vértice x do grafo domínio contribui como destino de uma aresta b do grafo contradomínio quando for destino de alguma aresta que se mapeia em b.
+Para facilitar a discussão, quando um vértice x do grafo domínio é origem de uma aresta a que se mapeia em uma aresta b do grafo contradomínio se dirá [REV] que o vértice x contribui como origem para a aresta b. Analogamente se dirá [REV] que um vértice x do grafo domínio contribui como destino de uma aresta b do grafo contradomínio quando for destino de alguma aresta que se mapeia em b.
 
-No caso de um homomorfismo cheio que não seja regular, haverá vértices do grafo domínio que não contribuirão como origem ou destino para arestas no grafo contradomínio das quais suas imagens são origem ou destino respectivamente. Pelo esquema da Figura 5, isto significa que em um homomorfismo cheio teremos  e em cada aresta do grafo imagem.
+No caso de um homomorfismo cheio que não seja regular, haverá vértices do grafo domínio que não contribuirão como origem ou destino para arestas no grafo contradomínio das quais suas imagens são origem ou destino respectivamente. Pelo esquema da Figura 5, isto significa que em um homomorfismo cheio se terá que [REV] e em cada aresta do grafo imagem.
 
-Com base nestas observações, definimos a seguir três índices de regularidade para cada aresta do grafo contradomínio e um para o grafo como um todo.
+Com base nestas observações, defini-se [REV] a seguir três índices de regularidade para cada aresta do grafo contradomínio e um para o grafo como um todo.
 
 Definição 9 - Índice de regularidade de aresta na origem ( IRAO ): Este índice indica a proporção de vértices que contribuem como origem para uma determinada aresta em relação à quantidade de vértices que deveriam contribuir como origem para a aresta se o homomorfismo fosse regular. De acordo com o esquema da Figura 5, este índice é dado por:
 
@@ -244,7 +244,7 @@ Definição 12 - Índice de regularidade de aresta médio do grafo ( IRAMG ): Es
 
 5 Método proposto
 
-Dado um grafo e uma classificação de seus vértices que se deseja analisar, propomos a criação de um grafo de classes da seguinte forma:
+Dado um grafo e uma classificação de seus vértices que se deseja analisar, propõe-se [REV] a criação de um grafo de classes da seguinte forma:
 
 a) Utilizar a construção apresentada na seção 3.3.1 para criar, a partir do grafo original, um grafo das classes como imagem de um homomorfismo de grafos cheio. Para isto tomar como a funçãoa função que mapeia cada vértice do grafo original à sua classe na classificação fornecida. Tomar, também, como a funçãoa função que mapeia cada aresta do grafo original ao tipo de relação entre vértices que ela representa no grafo;
 
@@ -264,21 +264,21 @@ c) O IRAMG fornece uma medida de relevância das arestas do grafo de classes em 
 
 6 Experimentos
 
-Nesta seção apresentamos experimentos com o objetivo de mostrar como podemos usar o método proposto na seção 5 para gerar um grafo de classes e como podemos utilizar este para auxiliar na análise dos dados.
+Nesta seção apresentam-se [REV] experimentos com o objetivo de mostrar como podemos usar o método proposto na seção 5 para gerar um grafo de classes e como podemos utilizar este para auxiliar na análise dos dados.
 
 6.1 Experimento com dados controlados
 
-Neste experimento utilizamos um grafo para o qual sabemos a classificação ótima de seus vértices. Este grafo nos serve de controle do experimento e o chamamos de Gctrl. Construímos Gctrl como um grafo composto de duzentos  componentes idênticos ao grafo mostrado na Figura 6, resultando em um grafo com mil vértices e oitocentas arestas. Os números presentes nos vértices da figura indicam a que classe cada vértice pertence. Aplicando o método da seção 5 com esta classificação sobre o grafo Gctrl, obtemos como grafo de classes exatamente o grafo apresentado na Figura 6.
+Neste experimento utilizou-se [REV] um grafo para o qual a classificação ótima de seus vértices é conhecida. Este grafo serve de controle do experimento é chamado [REV] de Gctrl. Construiu-se [REV] Gctrl como um grafo composto de duzentos  componentes idênticos ao grafo mostrado na Figura 6, resultando em um grafo com mil vértices e oitocentas arestas. Os números presentes nos vértices da figura indicam a que classe cada vértice pertence. Aplicando o método da seção 5 com esta classificação sobre o grafo Gctrl, foi obtido [REV] como grafo de classes exatamente o grafo apresentado na Figura 6.
 
- O nosso grafo de teste chamamos de Gteste e o obtemos da seguinte forma: Pegamos uma cópia de Gctrl e deletamos 10% de suas arestas, que equivale a oitenta arestas. Então acrescentamos oitenta arestas aleatórias, voltando ao número de arestas originais. O acréscimo de uma aresta aleatória é feito escolhendo aleatoriamente dois vértices do grafo e criando uma aresta que liga um destes ao outro. Assim temos Gteste como uma versão um pouco distorcida do grafo Gctrl.
-
-
+ O grafo de teste, chamado de Gteste [REV], foi obtido [REV] da seguinte forma: Pegou-se [REV] uma cópia de Gctrl e deletou-se [REV] 10% de suas arestas, que equivale a oitenta arestas. Então foram acrescentadas [REV] oitenta arestas aleatórias, voltando ao número de arestas originais. O acréscimo de uma aresta aleatória é feito escolhendo aleatoriamente dois vértices do grafo e criando uma aresta que liga um destes ao outro. Assim tem-se [REV] Gteste como uma versão um pouco distorcida do grafo Gctrl.
 
 
 
-Para efeito de comparação criamos um terceiro grafo, que chamamos de Grand, obtido pegando uma cópia de Gctrl, removendo todas as arestas e acrescentando oitocentas arestas aleatórias.
 
-Lembrando que os três grafos possuem o mesmo conjunto de vértices, utilizamos a classificação original dos vértices, aplicando o método proposto, para induzir homomorfismos cheios a partir de Gteste e Grand, que chamaremos de f e g respectivamente.
+
+Para efeito de comparação criou-se [REV] um terceiro grafo, chamado [REV] de Grand, obtido pegando uma cópia de Gctrl, removendo todas as arestas e acrescentando oitocentas arestas aleatórias.
+
+Lembrando que os três grafos possuem o mesmo conjunto de vértices, utilizou-se [REV] a classificação original dos vértices, aplicando o método proposto, para induzir homomorfismos cheios a partir de Gteste e Grand, chamados [REV] de f e g respectivamente.
 
 6.1.1 Resultados
 
@@ -294,15 +294,15 @@ Os grafos de classes obtidos pela aplicação do método proposto são mostrados
 
 6.1.2 Análise dos resultados
 
-Observando os grafos de classes não filtrados mostrados na Figura 7, vemos que ambos geraram grafos praticamente iguais ao grafo completo de cinco vértices. Com este resultado só o que podemos dizer é que, nos grafos originais, existem arestas que ligam vértices de cada classe a vértices de cada uma das classes existentes, com uma exceção: em Gteste não há nenhuma aresta que liga um vértice da classe 1 a um vértice da classe 4. Isto significa que praticamente não conseguimos obter informação nenhuma sobre Gteste ou Grand a partir da observação apenas das imagens dos homomorfismos, ou seja, sem o auxílio das métricas associadas aos grafos.
+Observando os grafos de classes não filtrados mostrados na Figura 7, percebe-se [REV] que ambos geraram grafos praticamente iguais ao grafo completo de cinco vértices. Com este resultado só o que se pode [REV] dizer é que, nos grafos originais, existem arestas que ligam vértices de cada classe a vértices de cada uma das classes existentes, com uma exceção: em Gteste não há nenhuma aresta que liga um vértice da classe 1 a um vértice da classe 4. Isto significa que praticamente não se conseguiu [REV] obter informação nenhuma sobre Gteste ou Grand a partir da observação apenas das imagens dos homomorfismos, ou seja, sem o auxílio das métricas associadas aos grafos.
 
-Observando a Figura 8, podemos ver que a filtragem por IRA consegue destacar o padrão esperado em f(Gteste), diferenciando-o de g(Grand) em que de fato não esperávamos padrão algum por Grand se tratar de um grafo aleatório. Podemos então ignorar as arestas com IRA baixo como uma espécie de ruído sobre a tendência geral das conexões. Na Tabela 1 estão listados os índices de regularidade de aresta calculados para as arestas destacadas em f(Gteste). A partir destes dados é possível fazer afirmações sobre o grafo original, Gteste, em relação à classificação de vértices fornecida. Por exemplo, podemos afirmar que 91% dos vértices em Gteste classificados na classe 1 se ligam a 91% dos vértices pertencentes à classe 3. Estas porcentagem foram retiradas dos valores de IRAO e IRAD respectivamente da linha correspondente à aresta 1 → 3. Uma observação é que neste exemplo os valores de IRAO, IRAD e IRA estão sempre os mesmos em cada aresta. No geral, porém, estes valores podem ser diferentes.
+Observando a Figura 8, pode-se [REV] ver que a filtragem por IRA consegue destacar o padrão esperado em f(Gteste), diferenciando-o de g(Grand) em que de fato não se esperava [REV] padrão algum por Grand se tratar de um grafo aleatório. Pode-se [REV] então ignorar as arestas com IRA baixo como uma espécie de ruído sobre a tendência geral das conexões. Na Tabela 1 estão listados os índices de regularidade de aresta calculados para as arestas destacadas em f(Gteste). A partir destes dados é possível fazer afirmações sobre o grafo original, Gteste, em relação à classificação de vértices fornecida. Por exemplo, pode-se [REV] afirmar que 91% dos vértices em Gteste classificados na classe 1 se ligam a 91% dos vértices pertencentes à classe 3. Estas porcentagens [REV] foram retiradas dos valores de IRAO e IRAD respectivamente da linha correspondente à aresta 1 → 3. Uma observação é que neste exemplo os valores de IRAO, IRAD e IRA estão sempre os mesmos em cada aresta. No geral, porém, estes valores podem ser diferentes.
 
 É importante observar que o padrão observado em f(Gteste) após a filtragem por IRA não reflete um padrão absoluto de Gteste, mas sim um padrão de Gteste relativo à classificação de vértices específica que induz o homomorfismo f.
 
 6.2 Experimento com dados reais
 
-Neste experimento utilizamos um grafo que reflete interações entre pessoas em uma rede social. Os dados que utilizamos nos foram cedidos pelo mestrando Pedro H. B. Ruas, que estuda interações no Facebook como parte de sua dissertação de mestrado. Os dados foram coletados utilizando a ferramenta NodeXL sobre a rede de amizades do pesquisador e são relativos ao mês de Agosto de 2014. Realizamos um pré-processamento destes dados e obtemos um grafo, que chamaremos de Gface, com as seguintes características:
+Neste experimento utilizou-se [REV] um grafo que reflete interações entre pessoas em uma rede social. Os dados que utilizados foram cedidos pelo mestrando Pedro H. B. Ruas, que estuda interações no Facebook como parte de sua dissertação de mestrado. Os dados foram coletados utilizando a ferramenta NodeXL sobre a rede de amizades do pesquisador e são relativos ao mês de Agosto de 2014. Realizou-se [REV] um pré-processamento destes dados e obtemos um grafo, que chamaremos de Gface, com as seguintes características:
 
 a) Cada vértice do grafo representa uma pessoa;
 
@@ -320,21 +320,21 @@ d) Total de arestas: 18616.
 
 
 
-A cada pessoa atribuímos seis atributos que contam com quantas pessoas distintas ela realizou (out) ou recebeu (in) cada tipo de interação. Por exemplo: O atributo “Liker in” indica quantas pessoas curtiram postagens da pessoa em questão, enquanto o atributo “Commenter out” indica quantas pessoas receberam comentários provenientes da pessoa em questão. A Tabela 2 lista os atributos criados e as estatísticas que indicam como cada atributo está distribuído no conjunto de pessoas considerado.
+A cada pessoa foram atribuídos [REV] seis atributos que contam com quantas pessoas distintas ela realizou (out) ou recebeu (in) cada tipo de interação. Por exemplo: O atributo “Liker in” indica quantas pessoas curtiram postagens da pessoa em questão, enquanto o atributo “Commenter out” indica quantas pessoas receberam comentários provenientes da pessoa em questão. A Tabela 2 lista os atributos criados e as estatísticas que indicam como cada atributo está distribuído no conjunto de pessoas considerado.
 
 
 
-Os atributos criados foram utilizados para agrupar os dados em classes (clustering) como descrito a seguir. Cada atributo foi normalizado linearmente do intervalo [Min; Max] para o intervalo [0; 1]. Para criar os agrupamentos, utilizamos uma implementação do algoritmo Growing Self Organizing Map (GSOM) baseada nas implementações de Mirkes, 2011, e Sasamura e Saito, 2003. Utilizamos a estrutura geral do algoritmo como apresentada por Mirkes, 2011, em especial a utilização da fração de variância não explicada (Fraction of Variance Unexplained – FVU) para decidir quando parar de crescer o SOM. Como em Sasamura e Saito, 2003, nossa implementação varia a topologia do SOM de tempos em tempos aplicando o algoritmo de árvore geradora mínima (Minimal Spanning Tree – MST) à rede de nodos.
+Os atributos criados foram utilizados para agrupar os dados em classes (clustering) como descrito a seguir. Cada atributo foi normalizado linearmente do intervalo [Min; Max] para o intervalo [0; 1]. Para criar os agrupamentos, utilizou-se [REV] uma implementação do algoritmo Growing Self Organizing Map (GSOM) baseada nas implementações de Mirkes, 2011, e Sasamura e Saito, 2003. Utilizou-se [REV] a estrutura geral do algoritmo como apresentada por Mirkes, 2011, em especial a utilização da fração de variância não explicada (Fraction of Variance Unexplained – FVU) para decidir quando parar de crescer o SOM. Como em Sasamura e Saito, 2003, a implementação utilizada [REV] varia a topologia do SOM de tempos em tempos aplicando o algoritmo de árvore geradora mínima (Minimal Spanning Tree – MST) à rede de nodos.
 
-Geramos agrupamentos com o GSOM para os dados normalizados utilizando valores diferentes para o parâmetro FVU. Para avaliar estes agrupamentos utilizamos o método dos índices de silhueta como apresentado por Rousseeuw, 1987, utilizando como medida de dissimilaridade o quadrado da distância euclidiana entre os vetores de atributos. O gráfico da Figura 9 mostra o índice de silhueta encontrado para cada agrupamento em relação ao FVU utilizado como parâmetro do algoritmo. Escolhemos o agrupamento com maior índice de silhueta, correspondente ao FVU de 0,3. Neste agrupamento o GSOM possuía 6 nodos em sua configuração final, sendo que 5 destes possuíam elementos atribuídos. Tomamos então como a classificação de uma pessoa o nodo do GSOM a que ela foi atribuída. As estatísticas para as classes definidas desta forma são mostradas na Tabela 3. 
-
-
+Gerou-se [REV] agrupamentos com o GSOM para os dados normalizados utilizando valores diferentes para o parâmetro FVU. Para avaliar estes agrupamentos utilizou-se [REV] o método dos índices de silhueta como apresentado por Rousseeuw, 1987, utilizando como medida de dissimilaridade o quadrado da distância euclidiana entre os vetores de atributos. O gráfico da Figura 9 mostra o índice de silhueta encontrado para cada agrupamento em relação ao FVU utilizado como parâmetro do algoritmo. Foi escolhido [REV] o agrupamento com maior índice de silhueta, correspondente ao FVU de 0,3. Neste agrupamento o GSOM possuía 6 nodos em sua configuração final, sendo que 5 destes possuíam elementos atribuídos. Tomou-se [REV] então como a classificação de uma pessoa o nodo do GSOM a que ela foi atribuída. As estatísticas para as classes definidas desta forma são mostradas na Tabela 3. 
 
 
 
 
 
-Utilizamos, então, essa classificação para induzir o homomorfismo cheio f sobre o grafo original utilizando o método proposto.
+
+
+Utilizou-se [REV], então, essa classificação para induzir o homomorfismo cheio f sobre o grafo original de acordo com o método proposto.
 
 6.2.1 Resultados
 
@@ -348,7 +348,7 @@ O grafo de classes obtido, f(Gface), é mostrado na Figura 10. Na versão filtra
 
 6.2.2 Análise dos resultados
 
-Na versão não filtrada de f(Gface) (imagem da esquerda na Figura 10) vemos que existe uma simetria no grafo em torno do eixo definido pelas classes 4 e 5 no sentido de que estas duas classes possuem padrões de conexão quase idênticos com as outras classes e entre si. Na versão filtrada do grafo vemos que a classe 4 se destaca como receptora de cometários e curtidas provenientes das outras classes, sugerindo que as 93 pessoas desta classe possuem um papel diferenciado na rede analisada. O importante para este trabalho é a observação de que as análises que fizemos neste parágrafo, e outras que poderiam ser feitas, apenas se tornaram aparentes quanto observamos o homomorfismo induzido pela classificação e os índices associados. O homomorfismo apresenta informações sobre as interações entre as classes encontradas em relação ao grafo original. Informações estas complementares à caracterização das classes dada pelo algoritmo de agrupamento (clusterização), como vista na Tabela 3.
+Na versão não filtrada de f(Gface) (imagem da esquerda na Figura 10) observa-se [REV] que existe uma simetria no grafo em torno do eixo definido pelas classes 4 e 5 no sentido de que estas duas classes possuem padrões de conexão quase idênticos com as outras classes e entre si. Na versão filtrada do grafo observa-se [REV] que a classe 4 se destaca como receptora de cometários e curtidas provenientes das outras classes, sugerindo que as 93 pessoas desta classe possuem um papel diferenciado na rede analisada. O importante para este trabalho é a observação de que as análises realizadas [REV] neste parágrafo, e outras que poderiam ser feitas, apenas se tornaram aparentes quanto observamos o homomorfismo induzido pela classificação e os índices associados. O homomorfismo apresenta informações sobre as interações entre as classes encontradas em relação ao grafo original. Informações estas complementares à caracterização das classes dada pelo algoritmo de agrupamento (clusterização), como vista na Tabela 3.
 
 7 Conclusão
 
@@ -366,7 +366,7 @@ c) graphApp.py: Aplicativo que implementa o algoritmo que a partir de um grafo e
 
 
 
-Com este trabalho obtemos uma forma de dizer algo sobre as arestas do grafo original pela análise das arestas do grafo de classes. Como trabalho futuro, propõe-se o estudo de uma forma de dizer algo sobre os caminhos no grafo original pela análise dos caminhos no grafo de classes. Uma ideia seria associar a cada vértice do grafo de classes uma tabela que, para cada aresta de entrada A de uma classe, associasse a cada aresta de saída B da classe uma medida de probabilidade de existir vértice no grafo original pertencente à classe que seja destino de uma aresta mapeada em A e origem de uma aresta mapeada em B. O trabalho seria definir tais tabelas de forma que se pudesse, dado um caminho no grafo de classes, indicar a probabilidade de existir um caminho correspondente no grafo original.
+Neste trabalho apresentou-se [REV] uma forma de dizer algo sobre as arestas do grafo original pela análise das arestas do grafo de classes. Como trabalho futuro, propõe-se o estudo de uma forma de dizer algo sobre os caminhos no grafo original pela análise dos caminhos no grafo de classes. Uma ideia seria associar a cada vértice do grafo de classes uma tabela que, para cada aresta de entrada A de uma classe, associasse a cada aresta de saída B da classe uma medida de probabilidade de existir vértice no grafo original pertencente à classe que seja destino de uma aresta mapeada em A e origem de uma aresta mapeada em B. O trabalho seria definir tais tabelas de forma que se pudesse, dado um caminho no grafo de classes, indicar a probabilidade de existir um caminho correspondente no grafo original.
 
 Referências
 
