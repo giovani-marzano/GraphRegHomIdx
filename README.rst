@@ -3,7 +3,7 @@ Repositório de arquivos para Trabalho de conclusão de curso
 
 :Author: Giovani Melo Marzano
 :Version: 0.9
-:Release: pre
+:Release: 0
 
 Conteúdo do diretório
 =====================
