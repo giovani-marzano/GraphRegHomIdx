@@ -56,19 +56,19 @@ class NumericAggregator(object):
         else:
             return float('nan')
 
-    @property
-    def var(self):
-        if self._count > 0:
-            return (self._sumOfSquares - self.mean**2)/self._count
+    def _calcVar(self, d=0):
+        if self.count > d:
+            return (self._sumOfSquares - (self._count * self.mean**2))/(self.count-d)
         else:
             return float('nan')
 
     @property
+    def var(self):
+        return self._calcVar()
+
+    @property
     def sampleVar(self):
-        if self._count > 1:
-            return (self._sumOfSquares - self.mean**2)/(self._count - 1)
-        else:
-            return float('nan')
+        return self._calcVar(1)
 
     @property
     def stdev(self):
@@ -126,8 +126,8 @@ class NumericAggregator(object):
 
     def __add__(self, other):
         v = NumericAggregator()
-        v += self
-        v += other
+        v.__iadd__(self)
+        v.__iadd__(other)
         return v
 
 class SymbolicAggregator(object):
