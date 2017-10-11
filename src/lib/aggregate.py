@@ -10,7 +10,7 @@ class NumericAggregator(object):
     """
 
     STAT_SET = {'count', 'sumX', 'sumX2', 'min', 'max', 'mean', 'var',
-        'sampleVar', 'stdef', 'sampleStdev'}
+        'sampleVar', 'stdev', 'sampleStdev'}
 
     def __init__(self):
         self._count = 0

@@ -321,9 +321,9 @@ class SimTempora(object):
 if __name__ == '__main__':
     g = gr.loadGraphml('teste.graphml', relationAttr='relation')
 
-    sim = SimTempora(g, 7, 15,
+    sim = SimTempora(g, 5, 15,
         iniTemp=0.2, endTemp=0.0,
-        iniTime=0, endTime=10, refClassAttr='regCls_1')
+        iniTime=0, endTime=10, refClassAttr='orig')
 
     sim.search()
 
