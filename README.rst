@@ -14,6 +14,45 @@ src
 prj
     Diretório com documentos diversos do projeto.
 
+Artigo
+    Diretório com os arquivos utilizados para gerar o artigo apresentado como
+    trabalho de conclusão de curso do cusro de Sistema de Informação na
+    PUC Minas.
+
+Resumo do artigo
+================
+
+Resumo
+------
+
+Este trabalho apresenta um método para gerar, a partir de um grafo em estudo e
+de uma classificação de seus vértices, um grafo de classes que se relaciona com
+o grafo original por meio de um homomorfismo de grafos e é anotado por métricas
+que visam dar suporte à análise dos dados. São apresentadas as bases teóricas
+para o mapeamento de grafos e para as métricas propostas. Tais métricas são
+chamadas no texto de índices de regularidade de aresta e indicam a proporção dos
+vértices do grafo original que participam das relações mostradas no grafo de
+classes. Também fornecem uma medida do quanto cada aresta do grafo de classes se
+aproxima da condição de um homomorfismo regular, que se supõe ideal. Dois
+experimentos são descritos nos quais se exemplifica a aplicação do método. Neles
+é feita um exame qualitativo da utilidade do método no auxílio à análise dos
+dados originais.
+
+Abstract
+--------
+
+This work present a method for generating, from a graph under study and a
+classification of its vertices, a graph of classes which relates to the original
+graph by a graph homomorphism and is annotated with metrics that aim to support
+the data analysis. The theoretical bases for the graph mapping and proposed
+metrics are presented. Such metrics are called edge regularity indices in the
+text and indicate the proportion of the original graph's vertices that
+participates in the relations shown in the graph of classes. They also provide a
+measure of how much each edge in the graph of classes approaches a regular
+homomorphism condition, which is assumed ideal. Two experiments are described in
+which the method's application is exemplified. In them a qualitative examination
+of the method's utility in aiding the analysis of the original data is made.
+
 Referências
 ===========
 
